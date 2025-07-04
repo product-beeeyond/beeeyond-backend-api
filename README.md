@@ -2,7 +2,7 @@
 ## **Project Overview**
 Beeeyond is a Nigerian real estate tokenization platform that allows everyday investors to buy fractional shares of real estate starting from ₦10,000. It uses the Stellar blockchain for property token issuance and a P2P exchange for fiat-crypto onboarding.
 
-This repository contains the **Node.js monolithic backend**, powered by **Express**, **PostgreSQL**, and **Sequelize ORM** — with full control over authentication, KYC, Stellar integration, and P2P exchange.
+This repository contains the Node.js monolithic backend, powered by Express, PostgreSQL, and Sequelize ORM — with full control over authentication, KYC, Stellar integration, and P2P exchange.
 
 ## Project Structure
 beeeyond- backend /
