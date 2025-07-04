@@ -413,6 +413,5 @@ pnpm run worker
 📃 License
 Beeeyond © 2025 — All rights reserved.
 
-🙌 Contributions
-Pull requests and suggestions are welcome!
+
 
