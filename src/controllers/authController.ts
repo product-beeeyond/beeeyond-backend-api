@@ -1,6 +1,8 @@
 import express, { Request, Response, NextFunction } from "express";
 import jwt from 'jsonwebtoken';
 import User from '../models/User';
+import { AuthRequest } from "../middleware/auth";
+import logger from '../utils/logger';
 
 export const SignUp = async (req: Request, res: Response) => {
   try {
@@ -123,5 +125,116 @@ export const Login =  async (req: Request, res: Response) => {
   } catch (error) {
     logger.error('Login error:', error);
     res.status(500).json({ error: 'Login failed' });
+  }
+}
+
+
+export const RefreshToken = async (req: Request, res: Response) => {
+  try {
+    const { refreshToken } = req.body;
+
+    if (!refreshToken) {
+      return res.status(401).json({ error: 'Refresh token required' });
+    }
+
+    // Verify refresh token
+    const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET!) as { id: string };
+
+    // Check if refresh token exists in Redis
+    const storedToken = await redisClient.get(`refresh:${decoded.id}`);
+    if (storedToken !== refreshToken) {
+      return res.status(401).json({ error: 'Invalid refresh token' });
+    }
+
+    // Find user
+    const user = await User.findByPk(decoded.id);
+    if (!user || !user.isActive) {
+      return res.status(401).json({ error: 'User not found' });
+    }
+
+    // Generate new access token
+    const newAccessToken = jwt.sign(
+      { id: user.id, email: user.email },
+      process.env.JWT_SECRET!,
+      { expiresIn: process.env.JWT_EXPIRES_IN }
+    );
+
+    res.json({
+      accessToken: newAccessToken,
+    });
+  } catch (error) {
+    logger.error('Token refresh error:', error);
+    res.status(401).json({ error: 'Invalid refresh token' });
+  }
+}
+
+
+export const Logout = async (req: AuthRequest, res: Response) => {
+  try {
+    const token = req.header('Authorization')?.replace('Bearer ', '');
+
+    if (token) {
+      // Add token to blacklist
+      await redisClient.setEx(`blacklist:${token}`, 24 * 60 * 60, 'true');
+    }
+
+    // Remove refresh token
+    if (req.user) {
+      await redisClient.del(`refresh:${req.user.id}`);
+    }
+
+    res.json({ message: 'Logout successful' });
+  } catch (error) {
+    logger.error('Logout error:', error);
+    res.status(500).json({ error: 'Logout failed' });
+  }
+}
+
+
+export const GetCurrentUser = async (req: AuthRequest, res: Response) => {
+  try {
+    res.json({
+      user: req.user!.toJSON(),
+    });
+  } catch (error) {
+    logger.error('Get user error:', error);
+    res.status(500).json({ error: 'Failed to fetch user data' });
+  }
+}
+
+export const UpdateUser = async (req: AuthRequest, res: Response) => {
+  try {
+    const { firstName, lastName, phone, dateOfBirth, address, investmentExperience, riskTolerance } = req.body;
+
+    // Validate phone uniqueness if provided
+    if (phone && phone !== req.user!.phone) {
+      const existingPhone = await User.findOne({
+        where: { phone },
+        // Exclude current user
+        // @ts-ignore
+        raw: false
+      });
+      if (existingPhone && existingPhone.id !== req.user!.id) {
+        return res.status(400).json({ error: 'Phone number already in use' });
+      }
+    }
+
+    await req.user!.update({
+      firstName,
+      lastName,
+      phone,
+      dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : undefined,
+      address,
+      investmentExperience,
+      riskTolerance,
+    });
+
+    res.json({
+      message: 'Profile updated successfully',
+      user: req.user!.toJSON(),
+    });
+  } catch (error) {
+    logger.error('Profile update error:', error);
+    res.status(500).json({ error: 'Profile update failed' });
   }
 }
