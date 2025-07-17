@@ -18,6 +18,8 @@ class Wallet extends Model<WalletAttributes, WalletCreationAttributes> implement
   public id!: string;
   public userId!: string;
   public currency!: string;
+  public publicKey!: string;
+  public encryptedSecretKey!: string;
   public availableBalance!: number;
   public lockedBalance!: number;
   public totalBalance!: number;
@@ -58,6 +60,14 @@ Wallet.init(
       validate: {
         min: 0,
       },
+    },
+    publicKey: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    encryptedSecretKey: {
+      type: DataTypes.TEXT,
+      allowNull: false,
     },
     totalBalance: {
       type: DataTypes.DECIMAL(12, 2),
