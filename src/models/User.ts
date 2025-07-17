@@ -148,7 +148,7 @@ User.init(
     hooks: {
       beforeCreate: async (user: User) => {
         if (user.password) {
-          const saltRounds = parseInt(process.env.BCRYPT_ROUNDS || '12');
+          const saltRounds = parseInt(process.env.BCRYPT_ROUNDS);
           user.password = await bcrypt.hash(user.password, saltRounds);
         }
         if (!user.referralCode) {
@@ -157,7 +157,7 @@ User.init(
       },
       beforeUpdate: async (user: User) => {
         if (user.changed('password')) {
-          const saltRounds = parseInt(process.env.BCRYPT_ROUNDS || '12');
+          const saltRounds = parseInt(process.env.BCRYPT_ROUNDS);
           user.password = await bcrypt.hash(user.password, saltRounds);
         }
       },
