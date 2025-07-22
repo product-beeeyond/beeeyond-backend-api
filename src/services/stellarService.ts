@@ -10,7 +10,8 @@ import Server, {
 } from 'stellar-sdk';
 import logger from '../utils/logger';
 import { encrypt, decrypt } from '../utils/crypto';
-import { Wallet } from '../models/Wallet';
+import  Wallet  from '../models/Wallet';
+import { STELLAR_NETWORK, STELLAR_HORIZON_URL, STELLAR_ISSUER_SECRET, STELLAR_DISTRIBUTION_SECRET } from '../config';
 
 interface CreateWalletResponse {
   publicKey: string;
@@ -45,12 +46,12 @@ class StellarService {
   constructor() {
     this.validateEnvironmentVariables();
 
-    this.network = process.env.STELLAR_NETWORK === 'mainnet' ? Networks.PUBLIC : Networks.TESTNET;
-    this.server = new Server(process.env.STELLAR_HORIZON_URL!);
+    this.network = STELLAR_NETWORK === 'mainnet' ? Networks.PUBLIC : Networks.TESTNET;
+    this.server = new Server(STELLAR_HORIZON_URL!);
 
     try {
-      this.issuerKeypair = Keypair.fromSecret(process.env.STELLAR_ISSUER_SECRET!);
-      this.distributionKeypair = Keypair.fromSecret(process.env.STELLAR_DISTRIBUTION_SECRET!);
+      this.issuerKeypair = Keypair.fromSecret(STELLAR_ISSUER_SECRET!);
+      this.distributionKeypair = Keypair.fromSecret(STELLAR_DISTRIBUTION_SECRET!);
     } catch (error) {
       logger.error('Invalid Stellar keypairs in environment variables:', error);
       throw new Error('Invalid Stellar keypairs configuration');
@@ -99,12 +100,12 @@ class StellarService {
   }
 
   // Create wallet for user with proper error handling and validation
-  async createWalletForUser(userId: number, userPassword: string): Promise<CreateWalletResponse> {
+  async createWalletForUser(userId: string, userPassword: string): Promise<CreateWalletResponse> {
     try {
       // Validate inputs
-      if (!userId || userId <= 0) {
-        throw new Error('Invalid user ID provided');
-      }
+      // if (!userId || userId <= 0) {
+      //   throw new Error('Invalid user ID provided');
+      // }
 
       if (!userPassword || userPassword.length < 8) {
         throw new Error('Password must be at least 8 characters long');
@@ -127,6 +128,10 @@ class StellarService {
         userId,
         publicKey: keypair.publicKey(),
         encryptedSecretKey: encryptedSecret,
+        currency: '',
+        availableBalance: 0,
+        lockedBalance: 0,
+        totalBalance: 0
       });
 
       logger.info(`Wallet created for user ${userId} with public key: ${keypair.publicKey()}`);
@@ -171,7 +176,7 @@ class StellarService {
       const newKeypair = Keypair.random();
 
       // Fund the account (testnet only)
-      if (process.env.STELLAR_NETWORK === 'testnet') {
+      if (STELLAR_NETWORK === 'testnet') {
         try {
           await this.server.friendbot(newKeypair.publicKey()).call();
           logger.info(`Testnet account funded: ${newKeypair.publicKey()}`);

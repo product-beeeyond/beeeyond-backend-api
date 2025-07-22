@@ -1,11 +1,12 @@
 import { Resend } from 'resend';
 import logger from '../utils/logger';
+import { RESEND_API_KEY, FRONTEND_URL } from '../config';
 
 class EmailService {
   private resend: Resend;
 
   constructor() {
-    this.resend = new Resend(process.env.RESEND_API_KEY);
+    this.resend = new Resend(RESEND_API_KEY);
   }
 
   async sendWelcomeEmail(email: string, firstName: string): Promise<void> {
@@ -93,7 +94,7 @@ class EmailService {
                       < li > Build a diversified real estate portfolio </li>
                         </ul>
                         < p > To get started, complete your KYC verification to unlock all features.</p>
-                          < a href = "${process.env.FRONTEND_URL}/kyc" class="button" > Complete KYC Verification </a>
+                          < a href = "${FRONTEND_URL}/kyc" class="button" > Complete KYC Verification </a>
                             < p > If you have any questions, our support team is here to help.</p>
                               < p > Best regards, <br>The Beeeyond Team </p>
                                 </div>
@@ -129,9 +130,9 @@ class EmailService {
           <h2>Hello ${firstName}, </h2>
               ${isApproved
         ? `<p>Congratulations! Your KYC verification has been approved. You can now access all Beeeyond features including property investments and withdrawals.</p>
-                   <a href="${process.env.FRONTEND_URL}/properties" class="button">Start Investing</a>`
+                   <a href="${FRONTEND_URL}/properties" class="button">Start Investing</a>`
         : `<p>Your KYC verification requires additional information. Please check your dashboard for details on what's needed.</p>
-                   <a href="${process.env.FRONTEND_URL}/kyc" class="button">Update KYC Information</a>`
+                   <a href="${FRONTEND_URL}/kyc" class="button">Update KYC Information</a>`
       }
 <p>Best regards, <br>The Beeeyond Team </p>
   </div>

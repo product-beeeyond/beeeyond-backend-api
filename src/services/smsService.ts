@@ -1,5 +1,6 @@
 import twilio from 'twilio';
 import logger from '../utils/logger';
+import { TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER } from '../config';
 
 class SMSService {
   private client: twilio.Twilio;
@@ -7,10 +8,10 @@ class SMSService {
 
   constructor() {
     this.client = twilio(
-      process.env.TWILIO_ACCOUNT_SID,
-      process.env.TWILIO_AUTH_TOKEN
+      TWILIO_ACCOUNT_SID,
+      TWILIO_AUTH_TOKEN
     );
-    this.fromNumber = process.env.TWILIO_PHONE_NUMBER!;
+    this.fromNumber = TWILIO_PHONE_NUMBER!;
   }
 
   async sendOTP(phoneNumber: string, otp: string): Promise<void> {

@@ -1,9 +1,10 @@
 import { createClient } from 'redis';
 import logger from '../utils/logger';
+import { REDIS_URL, REDIS_PASSWORD } from '.';
 
 const redisClient = createClient({
-  url: process.env.REDIS_URL ,
-  password: process.env.REDIS_PASSWORD,
+  url: REDIS_URL ,
+  password: REDIS_PASSWORD,
 });
 
 redisClient.on('error', (err) => {

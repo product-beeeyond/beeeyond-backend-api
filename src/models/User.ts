@@ -1,6 +1,8 @@
 import { DataTypes, Model, Optional } from 'sequelize';
 import { sequelize } from '../config/database';
 import bcrypt from 'bcryptjs';
+import { BCRYPT_ROUNDS } from '../config';
+import { UserRole } from '../middleware/auth';
 
 interface UserAttributes {
   id: string;
@@ -20,6 +22,7 @@ interface UserAttributes {
   referredBy?: string;
   isActive: boolean;
   lastLogin?: Date;
+  role: UserRole; // Added role to the interface
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -44,6 +47,7 @@ class User extends Model<UserAttributes, UserCreationAttributes> implements User
   public referredBy?: string;
   public isActive!: boolean;
   public lastLogin?: Date;
+  public role!: UserRole; // Fixed: Made role required and properly typed
 
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
@@ -140,6 +144,11 @@ User.init(
       type: DataTypes.DATE,
       allowNull: true,
     },
+    role: {
+      type: DataTypes.ENUM('user', 'admin', 'super_admin'),
+      defaultValue: 'user',
+      allowNull: false,
+    },
   },
   {
     sequelize,
@@ -148,7 +157,7 @@ User.init(
     hooks: {
       beforeCreate: async (user: User) => {
         if (user.password) {
-          const saltRounds = parseInt(process.env.BCRYPT_ROUNDS);
+          const saltRounds = Number(BCRYPT_ROUNDS);
           user.password = await bcrypt.hash(user.password, saltRounds);
         }
         if (!user.referralCode) {
@@ -157,7 +166,7 @@ User.init(
       },
       beforeUpdate: async (user: User) => {
         if (user.changed('password')) {
-          const saltRounds = parseInt(process.env.BCRYPT_ROUNDS);
+          const saltRounds = Number(BCRYPT_ROUNDS);
           user.password = await bcrypt.hash(user.password, saltRounds);
         }
       },
@@ -167,6 +176,7 @@ User.init(
       { fields: ['phone'] },
       { fields: ['referralCode'] },
       { fields: ['kycStatus'] },
+      { fields: ['role'] }, // Added index for role field
     ],
   }
 );

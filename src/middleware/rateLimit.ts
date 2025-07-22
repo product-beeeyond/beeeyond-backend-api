@@ -1,10 +1,11 @@
 import rateLimit from 'express-rate-limit';
 import { redisClient } from '../config/redis';
+import { RATE_LIMIT_MAX_REQUESTS, RATE_LIMIT_WINDOW_MS } from '../config';
 
 // General API rate limiting
 export const apiLimiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'), // 15 minutes
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100'),
+  windowMs: Number(RATE_LIMIT_WINDOW_MS), // 15 minutes
+  max: Number(RATE_LIMIT_MAX_REQUESTS),
   message: {
     error: 'Too many requests from this IP, please try again later',
   },
