@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import User from '../models/User';
 import { redisClient } from '../config/redis';
+import { JWT_SECRET } from '../config';
 
 interface JwtPayload {
   id: string;
@@ -25,7 +26,7 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
       return res.status(401).json({ error: 'Token has been invalidated' });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as JwtPayload;
+    const decoded = jwt.verify(token, JWT_SECRET!) as JwtPayload;
 
     const user = await User.findByPk(decoded.id);
     if (!user || !user.isActive) {

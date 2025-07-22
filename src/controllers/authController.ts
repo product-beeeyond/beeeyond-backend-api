@@ -5,6 +5,7 @@ import { AuthRequest } from "../middleware/auth";
 import logger from '../utils/logger';
 import { redisClient } from "../config/redis";
 import { emailService } from "../services/emailService";
+import { JWT_SECRET, JWT_EXPIRES_IN, JWT_REFRESH_SECRET, JWT_REFRESH_EXPIRES_IN } from "../config";
 
 export const SignUp = async (req: Request, res: Response) => {
   try {
@@ -53,14 +54,14 @@ export const SignUp = async (req: Request, res: Response) => {
     // Generate JWT tokens
     const accessToken = jwt.sign(
       { id: user.id, email: user.email },
-      process.env.JWT_SECRET!,
-      { expiresIn: process.env.JWT_EXPIRES_IN }
+      JWT_SECRET!,
+      { expiresIn: JWT_EXPIRES_IN }
     );
 
     const refreshToken = jwt.sign(
       { id: user.id },
-      process.env.JWT_REFRESH_SECRET!,
-      { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN }
+      JWT_REFRESH_SECRET!,
+      { expiresIn: JWT_REFRESH_EXPIRES_IN }
     );
 
     // Store refresh token in Redis
@@ -109,14 +110,14 @@ export const Login =  async (req: Request, res: Response) => {
     // Generate JWT tokens
     const accessToken = jwt.sign(
       { id: user.id, email: user.email },
-      process.env.JWT_SECRET!,
-      { expiresIn: process.env.JWT_EXPIRES_IN }
+      JWT_SECRET!,
+      { expiresIn: JWT_EXPIRES_IN }
     );
 
     const refreshToken = jwt.sign(
       { id: user.id },
-      process.env.JWT_REFRESH_SECRET!,
-      { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN }
+      JWT_REFRESH_SECRET!,
+      { expiresIn: JWT_REFRESH_EXPIRES_IN }
     );
 
     // Store refresh token in Redis
@@ -146,7 +147,7 @@ export const RefreshToken = async (req: Request, res: Response) => {
     }
 
     // Verify refresh token
-    const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET!) as { id: string };
+    const decoded = jwt.verify(refreshToken, JWT_REFRESH_SECRET!) as { id: string };
 
     // Check if refresh token exists in Redis
     const storedToken = await redisClient.get(`refresh:${decoded.id}`);
@@ -163,8 +164,8 @@ export const RefreshToken = async (req: Request, res: Response) => {
     // Generate new access token
     const newAccessToken = jwt.sign(
       { id: user.id, email: user.email },
-      process.env.JWT_SECRET!,
-      { expiresIn: process.env.JWT_EXPIRES_IN }
+      JWT_SECRET!,
+      { expiresIn: JWT_EXPIRES_IN }
     );
 
     res.json({

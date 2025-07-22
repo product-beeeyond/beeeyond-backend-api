@@ -13,6 +13,7 @@ import routes from './routes';
 import { errorHandler } from "./middleware/errorHandler";
 import { notFound } from "./middleware/errorHandler";
 import logger from './utils/logger';
+import { FRONTEND_URL, NODE_ENV, PORT } from './config';
 
 // Load environment variables
 dotenv.config();
@@ -21,7 +22,7 @@ const app = express();
 const server = createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || "http://localhost:5173",
+    origin: FRONTEND_URL,
     methods: ["GET", "POST"]
   }
 });
@@ -29,7 +30,7 @@ const io = new Server(server, {
 // Security middleware
 app.use(helmet());
 app.use(cors({
-  origin: process.env.FRONTEND_URL || "http://localhost:5173",
+  origin: FRONTEND_URL,
   credentials: true
 }));
 
@@ -72,7 +73,7 @@ app.set('io', io);
 app.use(notFound);
 app.use(errorHandler);
 
-const PORT = process.env.PORT || 3000;
+const SERVER_PORT = PORT || 3000;
 
 // Database connection and server start
 const startServer = async () => {
@@ -90,8 +91,8 @@ const startServer = async () => {
     logger.info('Redis connection established successfully');
 
     // Start server
-    server.listen(PORT, () => {
-      logger.info(`Server running on port ${PORT} in ${process.env.NODE_ENV} mode`);
+    server.listen(SERVER_PORT, () => {
+      logger.info(`Server running on port ${SERVER_PORT} in ${NODE_ENV} mode`);
     });
 
   } catch (error) {

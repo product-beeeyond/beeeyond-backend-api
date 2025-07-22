@@ -11,6 +11,7 @@ import Server, {
 import logger from '../utils/logger';
 import { encrypt, decrypt } from '../utils/crypto';
 import  Wallet  from '../models/Wallet';
+import { STELLAR_NETWORK, STELLAR_HORIZON_URL, STELLAR_ISSUER_SECRET, STELLAR_DISTRIBUTION_SECRET } from '../config';
 
 interface CreateWalletResponse {
   publicKey: string;
@@ -45,12 +46,12 @@ class StellarService {
   constructor() {
     this.validateEnvironmentVariables();
 
-    this.network = process.env.STELLAR_NETWORK === 'mainnet' ? Networks.PUBLIC : Networks.TESTNET;
-    this.server = new Server(process.env.STELLAR_HORIZON_URL!);
+    this.network = STELLAR_NETWORK === 'mainnet' ? Networks.PUBLIC : Networks.TESTNET;
+    this.server = new Server(STELLAR_HORIZON_URL!);
 
     try {
-      this.issuerKeypair = Keypair.fromSecret(process.env.STELLAR_ISSUER_SECRET!);
-      this.distributionKeypair = Keypair.fromSecret(process.env.STELLAR_DISTRIBUTION_SECRET!);
+      this.issuerKeypair = Keypair.fromSecret(STELLAR_ISSUER_SECRET!);
+      this.distributionKeypair = Keypair.fromSecret(STELLAR_DISTRIBUTION_SECRET!);
     } catch (error) {
       logger.error('Invalid Stellar keypairs in environment variables:', error);
       throw new Error('Invalid Stellar keypairs configuration');
@@ -175,7 +176,7 @@ class StellarService {
       const newKeypair = Keypair.random();
 
       // Fund the account (testnet only)
-      if (process.env.STELLAR_NETWORK === 'testnet') {
+      if (STELLAR_NETWORK === 'testnet') {
         try {
           await this.server.friendbot(newKeypair.publicKey()).call();
           logger.info(`Testnet account funded: ${newKeypair.publicKey()}`);

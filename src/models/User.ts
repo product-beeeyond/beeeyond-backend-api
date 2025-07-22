@@ -1,6 +1,7 @@
 import { DataTypes, Model, Optional } from 'sequelize';
 import { sequelize } from '../config/database';
 import bcrypt from 'bcryptjs';
+import { BCRYPT_ROUNDS } from '../config';
 
 interface UserAttributes {
   id: string;
@@ -148,7 +149,7 @@ User.init(
     hooks: {
       beforeCreate: async (user: User) => {
         if (user.password) {
-          const saltRounds = parseInt(process.env.BCRYPT_ROUNDS);
+          const saltRounds = Number(BCRYPT_ROUNDS);
           user.password = await bcrypt.hash(user.password, saltRounds);
         }
         if (!user.referralCode) {
@@ -157,7 +158,7 @@ User.init(
       },
       beforeUpdate: async (user: User) => {
         if (user.changed('password')) {
-          const saltRounds = parseInt(process.env.BCRYPT_ROUNDS);
+          const saltRounds = Number(BCRYPT_ROUNDS);
           user.password = await bcrypt.hash(user.password, saltRounds);
         }
       },

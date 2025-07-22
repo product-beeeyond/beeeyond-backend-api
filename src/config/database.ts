@@ -1,16 +1,17 @@
 import { Sequelize } from 'sequelize';
 import dotenv from 'dotenv';
 import logger from '../utils/logger';
+import { DB_HOST, DB_NAME, DB_PASSWORD, DB_PORT, DB_USERNAME } from '.';
 
 dotenv.config();
 
 const sequelize = new Sequelize(
-  process.env.DB_NAME!,
-  process.env.DB_USER!,
-  process.env.DB_PASSWORD!,
+  DB_NAME!,
+  DB_USERNAME!,
+  DB_PASSWORD!,
   {
-    host: process.env.DB_HOST,
-    port: parseInt(process.env.DB_PORT),
+    host: DB_HOST,
+    port: Number(DB_PORT),
     dialect: 'postgres',
     logging: (msg) => logger.debug(msg),
     pool: {
