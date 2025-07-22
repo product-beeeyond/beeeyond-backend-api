@@ -1,12 +1,19 @@
 import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
+import jwt, { JwtPayload } from 'jsonwebtoken';
 import User from '../models/User';
 import { redisClient } from '../config/redis';
 import { JWT_SECRET } from '../config';
 
-interface JwtPayload {
+export enum UserRole {
+  USER = 'user',
+  ADMIN = 'admin',
+  SUPER_ADMIN = 'super_admin'
+}
+
+interface CustomJwtPayload extends JwtPayload {
   id: string;
   email: string;
+  role?: string;
 }
 
 export interface AuthRequest extends Request {
@@ -18,7 +25,7 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
     const token = req.header('Authorization')?.replace('Bearer ', '');
 
     if (!token) {
-      return res.status(401).json({ error: 'Access denied. No token provided.' });
+      return res.status(401).json({ error: 'Access denied. Kindly login' });
     }
 
     const isBlacklisted = await redisClient.get(`blacklist:${token}`);
@@ -26,30 +33,70 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
       return res.status(401).json({ error: 'Token has been invalidated' });
     }
 
-    const decoded = jwt.verify(token, JWT_SECRET!) as JwtPayload;
+    const decoded = jwt.verify(token, JWT_SECRET!) as CustomJwtPayload;
 
     const user = await User.findByPk(decoded.id);
     if (!user || !user.isActive) {
-      return res.status(401).json({ error: 'Invalid token or user not found' });
+      return res.status(401).json({ error: 'Unauthorized access or user not found' });
     }
 
     req.user = user;
     next();
   } catch (error) {
-    res.status(401).json({ error: 'Invalid token' });
+    res.status(401).json({ error: 'Unauthorized' });
   }
 };
 
-export const authorize = (...roles: string[]) => {
+export const authorize = (...roles: UserRole[]) => {
   return (req: AuthRequest, res: Response, next: NextFunction) => {
     if (!req.user) {
       return res.status(401).json({ error: 'Authentication required' });
     }
 
-    // For now, we don't have roles in the User model
-    // This can be extended when role-based access is needed
+    // Check if user has any of the required roles
+    if (roles.length > 0 && !roles.includes(req.user.role as UserRole)) {
+      return res.status(403).json({
+        error: 'Insufficient permissions',
+        required: roles,
+        current: req.user.role
+      });
+    }
+
     next();
   };
+};
+
+// Specific middleware for admin access (admin or super_admin)
+export const requireAdmin = (req: AuthRequest, res: Response, next: NextFunction) => {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
+  const adminRoles = [UserRole.ADMIN, UserRole.SUPER_ADMIN];
+  if (!adminRoles.includes(req.user.role as UserRole)) {
+    return res.status(403).json({
+      error: 'Admin access required',
+      current: req.user.role
+    });
+  }
+
+  next();
+};
+
+// Specific middleware for super admin access only
+export const requireSuperAdmin = (req: AuthRequest, res: Response, next: NextFunction) => {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
+  if (req.user.role !== UserRole.SUPER_ADMIN) {
+    return res.status(403).json({
+      error: 'Super admin access required',
+      current: req.user.role
+    });
+  }
+
+  next();
 };
 
 export const requireKYC = (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -65,4 +112,19 @@ export const requireKYC = (req: AuthRequest, res: Response, next: NextFunction) 
   }
 
   next();
+};
+
+// Utility function to check if user has specific role
+export const hasRole = (user: User, role: UserRole): boolean => {
+  return user.role === role;
+};
+
+// Utility function to check if user is admin or super admin
+export const isAdmin = (user: User): boolean => {
+  return [UserRole.ADMIN, UserRole.SUPER_ADMIN].includes(user.role as UserRole);
+};
+
+// Utility function to check if user is super admin
+export const isSuperAdmin = (user: User): boolean => {
+  return user.role === UserRole.SUPER_ADMIN;
 };
