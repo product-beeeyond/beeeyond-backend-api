@@ -1,7 +1,7 @@
 import express, { Request, Response, NextFunction } from "express";
 import jwt from 'jsonwebtoken';
 import User from '../models/User';
-import { AuthRequest } from "../middleware/auth";
+import { AuthRequest, UserRole } from "../middleware/auth";
 import logger from '../utils/logger';
 import { redisClient } from "../config/redis";
 import { emailService } from "../services/emailService";
@@ -48,7 +48,8 @@ export const SignUp = async (req: Request, res: Response) => {
       riskTolerance: "",
       kycStatus: "",
       isVerified: false,
-      isActive: false
+      isActive: false,
+      role: UserRole.USER
     });
 
     // Generate JWT tokens
