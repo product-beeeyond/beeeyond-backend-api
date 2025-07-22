@@ -2,9 +2,10 @@ import { Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { AuthRequest, UserRole } from '../middleware/auth';
 import User from '../models/User';
-import { generateToken } from '../utils/jwt';
-import { sendWelcomeEmail } from '../utils/email';
-
+// import { generateToken } from '../utils/jwt';
+// import { sendWelcomeEmail } from '../utils/email';
+import { BCRYPT_ROUNDS } from '../config';
+import { emailService } from '../services/emailService';
 // Create admin user - Super Admin only
 export const createAdmin = async (req: AuthRequest, res: Response) => {
   try {
@@ -26,7 +27,7 @@ export const createAdmin = async (req: AuthRequest, res: Response) => {
     }
 
     // Hash password
-    const saltRounds = 12;
+    const saltRounds = Number(BCRYPT_ROUNDS);
     const hashedPassword = await bcrypt.hash(password, saltRounds);
 
     // Create admin user
@@ -46,16 +47,14 @@ export const createAdmin = async (req: AuthRequest, res: Response) => {
     });
 
     // Remove password from response
-    const { password: _, ...adminUserData } = adminUser.toJSON();
+    const { ...adminUserData } = adminUser.toJSON();
 
     // Send welcome email with temporary password
     try {
-      await sendWelcomeEmail({
-        email: adminUser.email,
-        firstName: adminUser.firstName!,
-        role: 'Admin',
-        temporaryPassword: password // In production, generate a temporary password
-      });
+      await emailService.sendWelcomeEmail(
+       adminUser.email as string,
+        adminUser.firstName as string,
+      );
     } catch (emailError) {
       console.error('Failed to send welcome email:', emailError);
       // Don't fail the creation if email fails
@@ -117,7 +116,7 @@ export const updateAdmin = async (req: AuthRequest, res: Response) => {
       isActive: isActive !== undefined ? isActive : admin.isActive
     });
 
-    const { password: _, ...updatedAdminData } = admin.toJSON();
+    const { ...updatedAdminData } = admin.toJSON();
 
     res.json({
       message: 'Admin user updated successfully',
@@ -180,7 +179,7 @@ export const promoteToAdmin = async (req: AuthRequest, res: Response) => {
       kycStatus: 'verified' // Admins should be KYC verified
     });
 
-    const { password: _, ...promotedUserData } = user.toJSON();
+    const { ...promotedUserData } = user.toJSON();
 
     // Send promotion notification email
     try {
@@ -222,7 +221,7 @@ export const demoteAdmin = async (req: AuthRequest, res: Response) => {
     // Demote admin to regular user
     await admin.update({ role: UserRole.USER });
 
-    const { password: _, ...demotedUserData } = admin.toJSON();
+    const { ...demotedUserData } = admin.toJSON();
 
     res.json({
       message: 'Admin demoted to regular user successfully',
@@ -285,15 +284,15 @@ export const resetAdminPassword = async (req: AuthRequest, res: Response) => {
 };
 
 // Helper functions for email notifications
-const sendWelcomeEmail = async (data: {
-  email: string;
-  firstName: string;
-  role: string;
-  temporaryPassword: string;
-}) => {
-  // Implement your email service here
-  console.log(`Sending welcome email to ${data.email} for ${data.role} role`);
-};
+// const sendWelcomeEmail = async (data: {
+//   email: string;
+//   firstName: string;
+//   role: string;
+//   // temporaryPassword: string;
+// }) => {
+//   // Implement your email service here
+//   console.log(`Sending welcome email to ${data.email} for ${data.role} role`);
+// };
 
 const sendPromotionEmail = async (data: {
   email: string;

@@ -11,7 +11,7 @@ import {
   promoteToAdmin,
   demoteAdmin,
   resetAdminPassword
-} from '../controllers/adminController';
+} from '../controllers/';
 import { body, param } from 'express-validator';
 import { handleValidationErrors } from '../middleware/validation';
 
