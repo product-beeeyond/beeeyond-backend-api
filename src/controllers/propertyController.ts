@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Request, Response, } from 'express';
 import { Op } from 'sequelize';
 import Property from '../models/Property';
 import PropertyHolding from '../models/PropertyHolding';
@@ -7,7 +7,7 @@ import { authenticate, AuthRequest } from '../middleware/auth';
 import logger from '../utils/logger';
 
 
-export const GetAllProperties = async (req, res) => {
+export const GetAllProperties = async (req: Request, res: Response) => {
   try {
     const {
       page = 1,
@@ -126,7 +126,7 @@ export const GetAllProperties = async (req, res) => {
   }
 }
 
-export const GetSingleProperty = async (req, res) => {
+export const GetSingleProperty = async (req: Request, res: Response) => {
   try {
     const property = await Property.findByPk(req.params.id);
 
@@ -180,7 +180,7 @@ export const GetSingleProperty = async (req, res) => {
 }
 
 
-export const GetPropertyAnalytics =  async (req: AuthRequest, res) => {
+export const GetPropertyAnalytics = async (req: AuthRequest, res: Response) => {
   try {
     const propertyId = req.params.id;
     const { period = '30d' } = req.query;

@@ -10,8 +10,8 @@ import { Server } from 'socket.io';
 import { sequelize } from './config/database';
 import { redisClient } from './config/redis';
 import routes from './routes';
-import { errorHandler } from "./middleware/errorHandler.ts";
-import { notFound } from "./middleware/errorHandler.ts";
+import { errorHandler } from "./middleware/errorHandler";
+import { notFound } from "./middleware/errorHandler";
 import logger from './utils/logger';
 
 // Load environment variables

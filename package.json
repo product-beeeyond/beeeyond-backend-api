@@ -4,8 +4,9 @@
 	"description": "Brikkle Real Estate Tokenization Platform Backend",
 	"main": "dist/app.js",
 	"scripts": {
-		"dev": "nodemon src/app.ts",
+		"dev": "nodemon dist/app.ts",
 		"build": "tsc",
+		"compile": "tsc -w",
 		"start": "node dist/app.js",
 		"migrate": "npx sequelize-cli db:migrate",
 		"migrate:undo": "npx sequelize-cli db:migrate:undo",

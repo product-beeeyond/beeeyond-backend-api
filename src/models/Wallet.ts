@@ -8,6 +8,8 @@ interface WalletAttributes {
   availableBalance: number;
   lockedBalance: number;
   totalBalance: number;
+  publicKey: string;
+  encryptedSecretKey: string;
   createdAt?: Date;
   updatedAt?: Date;
 }

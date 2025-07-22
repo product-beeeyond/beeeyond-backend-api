@@ -3,6 +3,8 @@ import jwt from 'jsonwebtoken';
 import User from '../models/User';
 import { AuthRequest } from "../middleware/auth";
 import logger from '../utils/logger';
+import { redisClient } from "../config/redis";
+import { emailService } from "../services/emailService";
 
 export const SignUp = async (req: Request, res: Response) => {
   try {
@@ -23,13 +25,13 @@ export const SignUp = async (req: Request, res: Response) => {
     }
 
     // Validate referral code if provided
-    let referredBy = null;
+    let referredBy;
     if (referralCode) {
       const referrer = await User.findOne({ where: { referralCode } });
       if (!referrer) {
         return res.status(400).json({ error: 'Invalid referral code' });
       }
-      referredBy = referrer.id;
+      referredBy = referrer?.id;
     }
 
     // Create user
@@ -40,6 +42,12 @@ export const SignUp = async (req: Request, res: Response) => {
       lastName,
       phone,
       referredBy,
+      nationality: "",
+      investmentExperience: "",
+      riskTolerance: "",
+      kycStatus: "",
+      isVerified: false,
+      isActive: false
     });
 
     // Generate JWT tokens

@@ -10,7 +10,7 @@ import Server, {
 } from 'stellar-sdk';
 import logger from '../utils/logger';
 import { encrypt, decrypt } from '../utils/crypto';
-import { Wallet } from '../models/Wallet';
+import  Wallet  from '../models/Wallet';
 
 interface CreateWalletResponse {
   publicKey: string;
@@ -99,12 +99,12 @@ class StellarService {
   }
 
   // Create wallet for user with proper error handling and validation
-  async createWalletForUser(userId: number, userPassword: string): Promise<CreateWalletResponse> {
+  async createWalletForUser(userId: string, userPassword: string): Promise<CreateWalletResponse> {
     try {
       // Validate inputs
-      if (!userId || userId <= 0) {
-        throw new Error('Invalid user ID provided');
-      }
+      // if (!userId || userId <= 0) {
+      //   throw new Error('Invalid user ID provided');
+      // }
 
       if (!userPassword || userPassword.length < 8) {
         throw new Error('Password must be at least 8 characters long');
@@ -127,6 +127,10 @@ class StellarService {
         userId,
         publicKey: keypair.publicKey(),
         encryptedSecretKey: encryptedSecret,
+        currency: '',
+        availableBalance: 0,
+        lockedBalance: 0,
+        totalBalance: 0
       });
 
       logger.info(`Wallet created for user ${userId} with public key: ${keypair.publicKey()}`);
