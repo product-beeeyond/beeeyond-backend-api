@@ -1,13 +1,17 @@
 import express, { Request, Response, NextFunction } from "express";
 import jwt from 'jsonwebtoken';
-import User from '../models/User';
-import { AuthRequest } from "../middleware/auth";
+import User, { UserAttributes } from '../models/User';
+import { AuthRequest, UserRole } from "../middleware/auth";
 import logger from '../utils/logger';
-
+import { redisClient } from "../config/redis";
+import { emailService } from "../services/emailService";
+import { JWT_SECRET, JWT_EXPIRES_IN, JWT_REFRESH_SECRET, JWT_REFRESH_EXPIRES_IN } from "../config";
+import { v4 as uuidv4 } from 'uuid'
+import { GenerateOTP, GenerateRefreshToken, GenerateSignature } from "../utils";
 export const SignUp = async (req: Request, res: Response) => {
   try {
     const { email, password, firstName, lastName, phone, referralCode } = req.body;
-
+    const uuiduser = uuidv4();
     // Check if user already exists
     const existingUser = await User.findOne({ where: { email } });
     if (existingUser) {
@@ -23,37 +27,51 @@ export const SignUp = async (req: Request, res: Response) => {
     }
 
     // Validate referral code if provided
-    let referredBy = null;
+    let referredBy;
     if (referralCode) {
       const referrer = await User.findOne({ where: { referralCode } });
       if (!referrer) {
         return res.status(400).json({ error: 'Invalid referral code' });
       }
-      referredBy = referrer.id;
+      referredBy = referrer?.id;
     }
-
+    const {otp, expiry} = GenerateOTP();
     // Create user
     const user = await User.create({
+      id: uuiduser,
       email,
       password,
       firstName,
       lastName,
       phone,
+      otp,
+      otp_expiry: expiry,
       referredBy,
+      nationality: "",
+      investmentExperience: "",
+      riskTolerance: "",
+      kycStatus: "",
+      isVerified: false,
+      isActive: false,
+      role: UserRole.USER
     });
 
-    // Generate JWT tokens
-    const accessToken = jwt.sign(
-      { id: user.id, email: user.email },
-      process.env.JWT_SECRET!,
-      { expiresIn: process.env.JWT_EXPIRES_IN }
-    );
+    const retrievedUser = (await User.findOne({
+      where: { email: email },
+    }));
 
-    const refreshToken = jwt.sign(
-      { id: user.id },
-      process.env.JWT_REFRESH_SECRET!,
-      { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN }
-    );
+    // Generate JWT tokens
+    const accessToken = await GenerateSignature({
+      id: user.id,
+      email: user.email,
+      verified: user.isVerified,
+    });
+
+    const refreshToken = await GenerateRefreshToken({
+      id: user.id,
+      email: user.email,
+      verified: user.isVerified,
+    });
 
     // Store refresh token in Redis
     await redisClient.setEx(`refresh:${user.id}`, 7 * 24 * 60 * 60, refreshToken);
@@ -67,7 +85,7 @@ export const SignUp = async (req: Request, res: Response) => {
 
     res.status(201).json({
       message: 'User registered successfully',
-      user: user.toJSON(),
+      user: retrievedUser?.toJSON(),
       tokens: {
         accessToken,
         refreshToken,
@@ -79,7 +97,7 @@ export const SignUp = async (req: Request, res: Response) => {
   }
 }
 
-export const Login =  async (req: Request, res: Response) => {
+export const Login = async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
 
@@ -101,14 +119,14 @@ export const Login =  async (req: Request, res: Response) => {
     // Generate JWT tokens
     const accessToken = jwt.sign(
       { id: user.id, email: user.email },
-      process.env.JWT_SECRET!,
-      { expiresIn: process.env.JWT_EXPIRES_IN }
+      JWT_SECRET!,
+      { expiresIn: JWT_EXPIRES_IN }
     );
 
     const refreshToken = jwt.sign(
       { id: user.id },
-      process.env.JWT_REFRESH_SECRET!,
-      { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN }
+      JWT_REFRESH_SECRET!,
+      { expiresIn: JWT_REFRESH_EXPIRES_IN }
     );
 
     // Store refresh token in Redis
@@ -138,7 +156,7 @@ export const RefreshToken = async (req: Request, res: Response) => {
     }
 
     // Verify refresh token
-    const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET!) as { id: string };
+    const decoded = jwt.verify(refreshToken, JWT_REFRESH_SECRET!) as { id: string };
 
     // Check if refresh token exists in Redis
     const storedToken = await redisClient.get(`refresh:${decoded.id}`);
@@ -155,8 +173,8 @@ export const RefreshToken = async (req: Request, res: Response) => {
     // Generate new access token
     const newAccessToken = jwt.sign(
       { id: user.id, email: user.email },
-      process.env.JWT_SECRET!,
-      { expiresIn: process.env.JWT_EXPIRES_IN }
+      JWT_SECRET!,
+      { expiresIn: JWT_EXPIRES_IN }
     );
 
     res.json({

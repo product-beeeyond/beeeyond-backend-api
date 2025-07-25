@@ -1,8 +1,10 @@
 import { DataTypes, Model, Optional } from 'sequelize';
 import { sequelize } from '../config/database';
 import bcrypt from 'bcryptjs';
+import { BCRYPT_ROUNDS } from '../config';
+import { UserRole } from '../middleware/auth';
 
-interface UserAttributes {
+export interface UserAttributes {
   id: string;
   email: string;
   password: string;
@@ -16,10 +18,13 @@ interface UserAttributes {
   riskTolerance: string;
   kycStatus: string;
   isVerified: boolean;
+  otp: number;
+  otp_expiry: Date;
   referralCode?: string;
   referredBy?: string;
   isActive: boolean;
   lastLogin?: Date;
+  role: UserRole;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -36,6 +41,8 @@ class User extends Model<UserAttributes, UserCreationAttributes> implements User
   public dateOfBirth?: Date;
   public nationality!: string;
   public address?: object;
+  public otp_expiry!: Date;
+  public otp!: number;
   public investmentExperience!: string;
   public riskTolerance!: string;
   public kycStatus!: string;
@@ -44,6 +51,7 @@ class User extends Model<UserAttributes, UserCreationAttributes> implements User
   public referredBy?: string;
   public isActive!: boolean;
   public lastLogin?: Date;
+  public role!: UserRole; // Fixed: Made role required and properly typed
 
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
@@ -53,9 +61,13 @@ class User extends Model<UserAttributes, UserCreationAttributes> implements User
     return bcrypt.compare(password, this.password);
   }
 
-  public toJSON(): object {
-    const values = Object.assign({}, this.get());
-    delete values.password;
+  // public toJSON(): object {
+  //   const values = Object.assign({}, this.get());
+  //   delete values.password;
+  //   return values;
+  // }
+  public toJSON(): Omit<UserAttributes, 'password'> {
+    const { password, ...values } = this.get();
     return values;
   }
 }
@@ -66,6 +78,7 @@ User.init(
       type: DataTypes.UUID,
       defaultValue: DataTypes.UUIDV4,
       primaryKey: true,
+      allowNull: false,
     },
     email: {
       type: DataTypes.STRING,
@@ -107,6 +120,30 @@ User.init(
       type: DataTypes.JSONB,
       allowNull: true,
     },
+    otp: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      validate: {
+        notNull: {
+          msg: "Otp is required"
+        },
+        notEmpty: {
+          msg: "provide an Otp",
+        },
+      }
+    },
+    otp_expiry: {
+      type: DataTypes.DATE,
+      allowNull: false,
+      validate: {
+        notNull: {
+          msg: "Otp expired",
+        },
+        notEmpty: {
+          msg: "provide an Otp",
+        },
+      }
+    },
     investmentExperience: {
       type: DataTypes.ENUM('beginner', 'intermediate', 'advanced'),
       defaultValue: 'beginner',
@@ -140,6 +177,11 @@ User.init(
       type: DataTypes.DATE,
       allowNull: true,
     },
+    role: {
+      type: DataTypes.ENUM('user', 'admin', 'super_admin'),
+      defaultValue: 'user',
+      allowNull: false,
+    },
   },
   {
     sequelize,
@@ -148,7 +190,7 @@ User.init(
     hooks: {
       beforeCreate: async (user: User) => {
         if (user.password) {
-          const saltRounds = parseInt(process.env.BCRYPT_ROUNDS);
+          const saltRounds = Number(BCRYPT_ROUNDS);
           user.password = await bcrypt.hash(user.password, saltRounds);
         }
         if (!user.referralCode) {
@@ -157,7 +199,7 @@ User.init(
       },
       beforeUpdate: async (user: User) => {
         if (user.changed('password')) {
-          const saltRounds = parseInt(process.env.BCRYPT_ROUNDS);
+          const saltRounds = Number(BCRYPT_ROUNDS);
           user.password = await bcrypt.hash(user.password, saltRounds);
         }
       },
@@ -167,6 +209,7 @@ User.init(
       { fields: ['phone'] },
       { fields: ['referralCode'] },
       { fields: ['kycStatus'] },
+      { fields: ['role'] }, // Added index for role field
     ],
   }
 );
