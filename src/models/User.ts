@@ -8,6 +8,7 @@ export interface UserAttributes {
   id: string;
   email: string;
   password: string;
+  salt: string;
   firstName?: string;
   lastName?: string;
   phone?: string;
@@ -19,7 +20,7 @@ export interface UserAttributes {
   kycStatus: string;
   isVerified: boolean;
   otp: number;
-  otp_expiry: Date;
+  otp_expiry?: Date;
   referralCode?: string;
   referredBy?: string;
   isActive: boolean;
@@ -28,6 +29,9 @@ export interface UserAttributes {
   createdAt?: Date;
   updatedAt?: Date;
 }
+type PublicUserAttributes = Omit<UserAttributes, 'password' | 'salt' | 'otp' | 'otp_expiry'>;
+
+type AdminUserAttributes = Omit<UserAttributes, 'password' | 'salt'>;
 
 interface UserCreationAttributes extends Optional<UserAttributes, 'id' | 'createdAt' | 'updatedAt'> { }
 
@@ -43,6 +47,7 @@ class User extends Model<UserAttributes, UserCreationAttributes> implements User
   public address?: object;
   public otp_expiry!: Date;
   public otp!: number;
+  public salt!: string;
   public investmentExperience!: string;
   public riskTolerance!: string;
   public kycStatus!: string;
@@ -66,8 +71,14 @@ class User extends Model<UserAttributes, UserCreationAttributes> implements User
   //   delete values.password;
   //   return values;
   // }
-  public toJSON(): Omit<UserAttributes, 'password'> {
-    const { password, ...values } = this.get();
+
+  public toJSON(): PublicUserAttributes {
+    const { password, salt, otp, otp_expiry, ...values } = this.get();
+    return values;
+  }
+
+  public toAdminJSON(): AdminUserAttributes {
+    const { password, salt, ...values } = this.get();
     return values;
   }
 }
@@ -94,6 +105,10 @@ User.init(
       validate: {
         len: [8, 255],
       },
+    },
+    salt: {
+      type: DataTypes.STRING,
+      allowNull: false,
     },
     firstName: {
       type: DataTypes.STRING,

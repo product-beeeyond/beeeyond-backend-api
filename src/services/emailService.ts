@@ -67,7 +67,7 @@ class EmailService {
 
   async sendOTP(
     email: string,
-    firstName: string,
+    firstName: string | undefined,
     otp: string,
     purpose: 'verification' | 'password_reset' | 'login' = 'verification'
   ): Promise<void> {
@@ -208,7 +208,7 @@ class EmailService {
   }
 
   private getOTPEmailTemplate(
-    firstName: string,
+    firstName: string | undefined,
     otp: string,
     purpose: 'verification' | 'password_reset' | 'login'
   ): string {
@@ -271,7 +271,7 @@ class EmailService {
         <h1>${headerText[purpose]}</h1>
       </div>
       <div class="content">
-        <h2>Hello ${firstName},</h2>
+        <h2>Hello ${firstName ?? "there"},</h2>
         <p>You requested to ${purposeText[purpose]} on Beeeyond. Please use the OTP code below:</p>
 
         <div class="otp-container">
