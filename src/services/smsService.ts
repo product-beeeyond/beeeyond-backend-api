@@ -99,7 +99,7 @@ class SMSService {
 
       logger.info(`OTP sent to ${phoneNumber}`);
     } catch (error) {
-      logger.error('Error sending OTP:', error);
+      logger.error('Error sending OTP in sms service:', error);
       throw error;
     }
   }
