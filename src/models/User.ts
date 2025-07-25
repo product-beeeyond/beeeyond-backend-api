@@ -4,7 +4,7 @@ import bcrypt from 'bcryptjs';
 import { BCRYPT_ROUNDS } from '../config';
 import { UserRole } from '../middleware/auth';
 
-interface UserAttributes {
+export interface UserAttributes {
   id: string;
   email: string;
   password: string;
@@ -18,11 +18,13 @@ interface UserAttributes {
   riskTolerance: string;
   kycStatus: string;
   isVerified: boolean;
+  otp: number;
+  otp_expiry: Date;
   referralCode?: string;
   referredBy?: string;
   isActive: boolean;
   lastLogin?: Date;
-  role: UserRole; // Added role to the interface
+  role: UserRole;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -39,6 +41,8 @@ class User extends Model<UserAttributes, UserCreationAttributes> implements User
   public dateOfBirth?: Date;
   public nationality!: string;
   public address?: object;
+  public otp_expiry!: Date;
+  public otp!: number;
   public investmentExperience!: string;
   public riskTolerance!: string;
   public kycStatus!: string;
@@ -57,9 +61,13 @@ class User extends Model<UserAttributes, UserCreationAttributes> implements User
     return bcrypt.compare(password, this.password);
   }
 
-  public toJSON(): object {
-    const values = Object.assign({}, this.get());
-    delete values.password;
+  // public toJSON(): object {
+  //   const values = Object.assign({}, this.get());
+  //   delete values.password;
+  //   return values;
+  // }
+  public toJSON(): Omit<UserAttributes, 'password'> {
+    const { password, ...values } = this.get();
     return values;
   }
 }
@@ -70,6 +78,7 @@ User.init(
       type: DataTypes.UUID,
       defaultValue: DataTypes.UUIDV4,
       primaryKey: true,
+      allowNull: false,
     },
     email: {
       type: DataTypes.STRING,
@@ -110,6 +119,30 @@ User.init(
     address: {
       type: DataTypes.JSONB,
       allowNull: true,
+    },
+    otp: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      validate: {
+        notNull: {
+          msg: "Otp is required"
+        },
+        notEmpty: {
+          msg: "provide an Otp",
+        },
+      }
+    },
+    otp_expiry: {
+      type: DataTypes.DATE,
+      allowNull: false,
+      validate: {
+        notNull: {
+          msg: "Otp expired",
+        },
+        notEmpty: {
+          msg: "provide an Otp",
+        },
+      }
     },
     investmentExperience: {
       type: DataTypes.ENUM('beginner', 'intermediate', 'advanced'),

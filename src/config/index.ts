@@ -13,10 +13,10 @@ export const DB_USERNAME = process.env.DB_USERNAME;
 export const DATABASE_URL = process.env.DATABASE_URL;
 
 // JWT Configuration
-export const JWT_SECRET = process.env.JWT_SECRET;
-export const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN;
-export const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET;
-export const JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRES_IN;
+export const JWT_SECRET = process.env.JWT_SECRET as string;
+export const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN as string;
+export const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET as string;
+export const JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRES_IN as string;
 
 // Redis Configuration
 export const REDIS_HOST = process.env.REDIS_HOST;
