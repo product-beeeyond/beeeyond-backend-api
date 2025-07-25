@@ -1,6 +1,22 @@
 import { Request, Response, NextFunction } from 'express';
 import Joi from 'joi';
+import { validationResult } from 'express-validator';
 
+export const handleValidationErrors = (req: Request, res: Response, next: NextFunction) => {
+  const errors = validationResult(req);
+
+  if (!errors.isEmpty()) {
+    return res.status(400).json({
+      error: 'Validation failed',
+      details: errors.array().map(error => ({
+        field: error.type === 'field' ? error.path : 'unknown',
+        message: error.msg
+      }))
+    });
+  }
+
+  next();
+};
 export const validate = (schema: Joi.ObjectSchema) => {
   return (req: Request, res: Response, next: NextFunction) => {
     const { error } = schema.validate(req.body, { abortEarly: false });

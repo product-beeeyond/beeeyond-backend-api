@@ -27,7 +27,7 @@ interface PropertyAttributes {
   updatedAt?: Date;
 }
 
-interface PropertyCreationAttributes extends Optional<PropertyAttributes, 'id' | 'createdAt' | 'updatedAt'> { }
+type PropertyCreationAttributes = Optional<PropertyAttributes, 'id' | 'createdAt' | 'updatedAt'>
 
 class Property extends Model<PropertyAttributes, PropertyCreationAttributes> implements PropertyAttributes {
   public id!: string;
@@ -168,7 +168,7 @@ Property.init(
       { fields: ['tokenPrice'] },
     ],
     validate: {
-      availableTokensValid() {
+      availableTokensValid(this: Property) {
         if (this.availableTokens > this.totalTokens) {
           throw new Error('Available tokens cannot exceed total tokens');
         }

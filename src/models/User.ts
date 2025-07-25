@@ -1,3 +1,5 @@
+/* eslint-disable unused-imports/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { DataTypes, Model, Optional } from 'sequelize';
 import { sequelize } from '../config/database';
 import bcrypt from 'bcryptjs';
@@ -33,7 +35,7 @@ type PublicUserAttributes = Omit<UserAttributes, 'password' | 'salt' | 'otp' | '
 
 type AdminUserAttributes = Omit<UserAttributes, 'password' | 'salt'>;
 
-interface UserCreationAttributes extends Optional<UserAttributes, 'id' | 'createdAt' | 'updatedAt'> { }
+type UserCreationAttributes = Optional<UserAttributes, 'id' | 'createdAt' | 'updatedAt'>
 
 class User extends Model<UserAttributes, UserCreationAttributes> implements UserAttributes {
   public id!: string;
