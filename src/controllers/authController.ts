@@ -1,11 +1,11 @@
-import express, { Request, Response, NextFunction } from "express";
+import { Request, Response } from "express";
 import jwt from 'jsonwebtoken';
-import User, { UserAttributes } from '../models/User';
+import User from '../models/User';
 import { AuthRequest, UserRole } from "../middleware/auth";
 import logger from '../utils/logger';
 import { redisClient } from "../config/redis";
 import { emailService } from "../services/emailService";
-import { JWT_SECRET, JWT_EXPIRES_IN, JWT_REFRESH_SECRET, JWT_REFRESH_EXPIRES_IN } from "../config";
+import { JWT_REFRESH_SECRET } from "../config";
 import { v4 as uuidv4 } from 'uuid'
 import { GenerateOTP, GenerateRefreshToken, GenerateSignature } from "../utils";
 import { smsService } from "../services/smsService";
@@ -466,7 +466,6 @@ export const UpdateUser = async (req: AuthRequest, res: Response) => {
       const existingPhone = await User.findOne({
         where: { phone },
         // Exclude current user
-        // @ts-ignore
         raw: false
       });
       if (existingPhone && existingPhone.id !== req.user!.id) {

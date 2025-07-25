@@ -1,9 +1,10 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Request, Response, } from 'express';
 import { Op } from 'sequelize';
 import Property from '../models/Property';
 import PropertyHolding from '../models/PropertyHolding';
 import Transaction from '../models/Transaction';
-import { authenticate, AuthRequest } from '../middleware/auth';
+import {  AuthRequest } from '../middleware/auth';
 import logger from '../utils/logger';
 
 
@@ -186,7 +187,7 @@ export const GetPropertyAnalytics = async (req: AuthRequest, res: Response) => {
     const { period = '30d' } = req.query;
 
     // Calculate date range based on period
-    let startDate = new Date();
+    const startDate = new Date();
     switch (period) {
       case '7d':
         startDate.setDate(startDate.getDate() - 7);

@@ -6,7 +6,7 @@ import { authenticate } from '../middleware/auth';
 // import { redisClient } from '../config/redis';
 // import { emailService } from '../services/emailService';
 // import logger from '../utils/logger';
-import { SignUp, Login, RefreshToken, Logout, GetCurrentUser, UpdateUser} from "../controllers/authController"
+import { SignUp, Login, RefreshToken, Logout} from "../controllers/authController"
 
 const router = Router();
 

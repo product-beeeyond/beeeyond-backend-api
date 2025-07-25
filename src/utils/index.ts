@@ -1,6 +1,6 @@
 import bcrypt from "bcryptjs";
 import jwt, { JwtPayload } from "jsonwebtoken";
-import { JWT_EXPIRES_IN, JWT_REFRESH_EXPIRES_IN, JWT_REFRESH_SECRET, JWT_SECRET } from "../config";
+import { JWT_REFRESH_SECRET, JWT_SECRET } from "../config";
 import { UserPayload } from "../interface/User.dto";
 
 export const GenerateOTP = () => {

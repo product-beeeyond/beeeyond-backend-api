@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Resend } from 'resend';
 import logger from '../utils/logger';
 import { RESEND_API_KEY, FRONTEND_URL } from '../config';

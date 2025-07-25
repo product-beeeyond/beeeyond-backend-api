@@ -1,14 +1,12 @@
-import { Request, Response, } from 'express';
-import { Op, Transaction as DbTransaction } from 'sequelize';
+import { Response, } from 'express';
+import { Op } from 'sequelize';
 import { sequelize } from '../config/database';
-import { authenticate, requireKYC, AuthRequest } from '../middleware/auth';
-import { validate, investmentSchema } from '../middleware/validation';
-import User from '../models/User';
+import { AuthRequest } from '../middleware/auth';
 import Property from '../models/Property';
 import Transaction from '../models/Transaction';
 import PropertyHolding from '../models/PropertyHolding';
 import Wallet from '../models/Wallet';
-import { stellarService } from '../services/stellarService';
+// import { stellarService } from '../services/stellarService';
 import { emailService } from '../services/emailService';
 import { smsService } from '../services/smsService';
 import logger from '../utils/logger';

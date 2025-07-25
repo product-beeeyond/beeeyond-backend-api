@@ -4,7 +4,7 @@ import {
   authorize,
   requireAdmin,
   requireSuperAdmin,
-  requireKYC,
+  // requireKYC,
   UserRole
 } from '../middleware/auth';
 

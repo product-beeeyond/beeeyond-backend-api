@@ -1,5 +1,5 @@
 import rateLimit from 'express-rate-limit';
-import { redisClient } from '../config/redis';
+// import { redisClient } from '../config/redis';
 import { RATE_LIMIT_MAX_REQUESTS, RATE_LIMIT_WINDOW_MS } from '../config';
 
 // General API rate limiting

@@ -13,7 +13,7 @@ interface PropertyHoldingAttributes {
   updatedAt?: Date;
 }
 
-interface PropertyHoldingCreationAttributes extends Optional<PropertyHoldingAttributes, 'id' | 'createdAt' | 'updatedAt'> { }
+type PropertyHoldingCreationAttributes = Optional<PropertyHoldingAttributes, 'id' | 'createdAt' | 'updatedAt'>
 
 class PropertyHolding extends Model<PropertyHoldingAttributes, PropertyHoldingCreationAttributes> implements PropertyHoldingAttributes {
   public id!: string;

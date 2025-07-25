@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authenticate, requireKYC, AuthRequest } from '../middleware/auth';
+import { authenticate, requireKYC } from '../middleware/auth';
 import { validate, investmentSchema } from '../middleware/validation';
 import { BuyPropertyToken, GetTransactionHistory, GetUserPortfolio, SellPropertyToken } from '../controllers/investmentController';
 
