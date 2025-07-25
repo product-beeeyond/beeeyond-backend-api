@@ -16,7 +16,6 @@ export const validate = (schema: Joi.ObjectSchema) => {
         details: errors,
       });
     }
-
     next();
   };
 };
@@ -28,6 +27,11 @@ export const registerSchema = Joi.object({
   firstName: Joi.string().min(2).max(50).optional(),
   lastName: Joi.string().min(2).max(50).optional(),
   phone: Joi.string().pattern(/^\+?[1-9]\d{1,14}$/).optional(),
+  confirm_password: Joi.any()
+    .equal(Joi.ref("password"))
+    .required()
+    .label("Confirm password")
+    .messages({ "any.only": "{{#label}} does not match" }),
   referralCode: Joi.string().optional(),
 });
 
