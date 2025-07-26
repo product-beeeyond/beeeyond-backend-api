@@ -1,9 +1,6 @@
 import { Sequelize } from 'sequelize';
-import dotenv from 'dotenv';
 import logger from '../utils/logger';
 import { DB_HOST, DB_NAME, DB_PASSWORD, DB_PORT, DB_USERNAME } from '.';
-
-dotenv.config();
 
 const sequelize = new Sequelize(
   DB_NAME!,
@@ -22,9 +19,13 @@ const sequelize = new Sequelize(
     },
     define: {
       timestamps: true,
-      underscored: true,
-      createdAt: 'created_at',
-      updatedAt: 'updated_at',
+      underscored: false, // Changed to false - keeps camelCase
+    },
+    dialectOptions: {
+      ssl: {
+        require: true,
+        rejectUnauthorized: false, // Only for development
+      },
     },
   }
 );

@@ -8,7 +8,7 @@ import { emailService } from "../services/emailService";
 import { JWT_REFRESH_SECRET } from "../config";
 import { v4 as uuidv4 } from 'uuid'
 import { GenerateOTP, GenerateRefreshToken, GenerateSignature } from "../utils";
-import { smsService } from "../services/smsService";
+// import { smsService } from "../services/smsService";
 
 export const SignUp = async (req: Request, res: Response) => {
   try {
@@ -86,11 +86,11 @@ export const SignUp = async (req: Request, res: Response) => {
       logger.error('Failed to send otp via mail:', emailError);
     }
 
-    try {
-      await smsService.sendOTP(user.phone!, String(otp))
-    } catch (smsError) {
-      logger.error('Failed to send otp via sms:', smsError);
-    }
+    // try {
+    //   await smsService.sendOTP(user.phone!, String(otp))
+    // } catch (smsError) {
+    //   logger.error('Failed to send otp via sms:', smsError);
+    // }
 
     res.status(200).json({
       message: 'User registered successfully, verify otp',
@@ -210,13 +210,13 @@ export const ResendOTP = async (req: Request, res: Response) => {
     }
 
     // Send OTP via SMS if phone number exists
-    if (user.phone) {
-      try {
-        await smsService.sendOTP(user.phone, String(otp));
-      } catch (smsError) {
-        logger.error('Failed to send OTP via SMS:', smsError);
-      }
-    }
+    // if (user.phone) {
+    //   try {
+    //     await smsService.sendOTP(user.phone, String(otp));
+    //   } catch (smsError) {
+    //     logger.error('Failed to send OTP via SMS:', smsError);
+    //   }
+    // }
 
     res.json({
       message: 'OTP sent successfully',
@@ -260,13 +260,13 @@ export const ForgotPassword = async (req: Request, res: Response) => {
     }
 
     // Send OTP via SMS if phone number exists
-    if (user.phone) {
-      try {
-        await smsService.sendOTP(user.phone, String(otp));
-      } catch (smsError) {
-        logger.error('Failed to send password reset OTP via SMS:', smsError);
-      }
-    }
+    // if (user.phone) {
+    //   try {
+    //     await smsService.sendOTP(user.phone, String(otp));
+    //   } catch (smsError) {
+    //     logger.error('Failed to send password reset OTP via SMS:', smsError);
+    //   }
+    // }
 
     res.json({
       message: 'If an account with this email exists, a password reset OTP has been sent',

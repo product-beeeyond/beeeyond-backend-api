@@ -32,6 +32,7 @@ export const STELLAR_DISTRIBUTION_SECRET = process.env.STELLAR_DISTRIBUTION_SECR
 
 // Email Services
 export const RESEND_API_KEY = process.env.RESEND_API_KEY;
+export const FROM_EMAIL = process.env.FROM_EMAIL;
 
 // SMS
 export const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;

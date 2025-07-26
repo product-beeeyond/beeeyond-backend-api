@@ -4,7 +4,7 @@ import { REDIS_URL, REDIS_PASSWORD } from '.';
 
 const redisClient = createClient({
   url: REDIS_URL ,
-  password: REDIS_PASSWORD,
+  ...(REDIS_PASSWORD && { password: REDIS_PASSWORD }),
 });
 
 redisClient.on('error', (err) => {
