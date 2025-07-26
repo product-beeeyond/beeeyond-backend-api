@@ -6,11 +6,13 @@ import { authenticate } from '../middleware/auth';
 // import { redisClient } from '../config/redis';
 // import { emailService } from '../services/emailService';
 // import logger from '../utils/logger';
-import { SignUp, Login, RefreshToken, Logout, GetCurrentUser, UpdateUser} from "../controllers/authController"
+import { SignUp, Login, RefreshToken, Logout, VerifyOTP, ResendOTP} from "../controllers/authController"
 
 const router = Router();
 
 router.post('/register', validate(registerSchema), SignUp);
+router.post('/verify-otp', authenticate, VerifyOTP);
+router.post('/resend-otp', authenticate, ResendOTP);
 router.post('/login', validate(loginSchema), Login);
 router.post('/refresh', RefreshToken);
 router.post('/logout', authenticate, Logout);

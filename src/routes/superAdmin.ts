@@ -10,8 +10,8 @@ import {
   deactivateAdmin,
   promoteToAdmin,
   demoteAdmin,
-  resetAdminPassword
-} from '../controllers/';
+  // resetAdminPassword
+} from '../controllers/adminController';
 import { body, param } from 'express-validator';
 import { handleValidationErrors } from '../middleware/validation';
 
@@ -33,10 +33,10 @@ const validateUpdateAdmin = [
   handleValidationErrors
 ];
 
-const validateResetPassword = [
-  body('newPassword').isLength({ min: 8 }).withMessage('New password must be at least 8 characters long'),
-  handleValidationErrors
-];
+// const validateResetPassword = [
+//   body('newPassword').isLength({ min: 8 }).withMessage('New password must be at least 8 characters long'),
+//   handleValidationErrors
+// ];
 
 const validateUserId = [
   param('userId').isUUID().withMessage('Valid user ID is required'),
@@ -70,6 +70,6 @@ router.patch('/promote/:userId', validateUserId, promoteToAdmin);
 router.patch('/:adminId/demote', validateAdminId, demoteAdmin);
 
 // Reset admin password
-router.patch('/:adminId/reset-password', validateAdminId, validateResetPassword, resetAdminPassword);
+// router.patch('/:adminId/reset-password', validateAdminId, validateResetPassword, resetAdminPassword);
 
 export default router;

@@ -22,27 +22,31 @@ export interface AuthRequest extends Request {
 
 export const authenticate = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const token = req.header('Authorization')?.replace('Bearer ', '');
+    // console.log("token------", req.headers);
+    const token = req.header('authorization')?.replace('Bearer ', '');
 
     if (!token) {
-      return res.status(401).json({ error: 'Access denied. Kindly login' });
+      return res.status(401).json({ error: 'Access denied. No auth' });
     }
 
     const isBlacklisted = await redisClient.get(`blacklist:${token}`);
     if (isBlacklisted) {
-      return res.status(401).json({ error: 'Token has been invalidated' });
+      return res.status(401).json({ error: 'Auth has been invalidated' });
     }
-
+    // console.log("token------", token);
     const decoded = jwt.verify(token, JWT_SECRET!) as CustomJwtPayload;
-
-    const user = await User.findByPk(decoded.id);
-    if (!user || !user.isActive) {
-      return res.status(401).json({ error: 'Unauthorized access or user not found' });
+    // console.log("token------", decoded);
+    // const user = await User.findByPk(decoded.id);
+    const user = (await User.findOne({
+      where: { email: decoded.email },
+    })) as unknown as User;
+    if (user.email) {
+      // req.user = user;
+      return next();
     }
+    return res.status(401).json({ error: 'Unauthorized access or user not found' });
 
-    req.user = user;
-    next();
-  } catch (error) {
+  } catch {
     res.status(401).json({ error: 'Unauthorized' });
   }
 };

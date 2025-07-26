@@ -1,12 +1,12 @@
-import { Request, Response, NextFunction } from 'express';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { Request, Response } from 'express';
 import logger from '../utils/logger';
 import { NODE_ENV } from '../config';
 
 export const errorHandler = (
   error: any,
   req: Request,
-  res: Response,
-  next: NextFunction
+  res: Response
 ) => {
   logger.error('Error:', {
     message: error.message,

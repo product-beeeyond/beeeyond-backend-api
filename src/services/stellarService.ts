@@ -1,21 +1,21 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import Server, {
   Keypair,
   Asset,
   Operation,
   TransactionBuilder,
   Networks,
-  Account,
   BASE_FEE,
-  ServerApi,
-} from 'stellar-sdk';
+  Horizon,
+} from '@stellar/stellar-sdk';
 import logger from '../utils/logger';
-import { encrypt, decrypt } from '../utils/crypto';
-import  Wallet  from '../models/Wallet';
+import { encrypt, decrypt } from '../utils/cypher';
+import Wallet from '../models/Wallet';
 import { STELLAR_NETWORK, STELLAR_HORIZON_URL, STELLAR_ISSUER_SECRET, STELLAR_DISTRIBUTION_SECRET } from '../config';
 
 interface CreateWalletResponse {
   publicKey: string;
-  walletId: number;
+  walletId: string;
 }
 
 interface CreateAccountResponse {
@@ -36,7 +36,7 @@ interface AccountBalance {
 }
 
 class StellarService {
-  private server: Server;
+  private server: Horizon.Server;
   private network: string;
   private issuerKeypair: Keypair;
   private distributionKeypair: Keypair;
@@ -427,13 +427,13 @@ class StellarService {
     try {
       await this.server.loadAccount(publicKey);
       return true;
-    } catch (error) {
+    } catch {
       return false;
     }
   }
 
   // Get transaction history
-  async getTransactionHistory(publicKey: string, limit: number = 10): Promise<ServerApi.TransactionRecord[]> {
+  async getTransactionHistory(publicKey: string, limit: number = 10): Promise<Horizon.ServerApi.TransactionRecord[]> {
     try {
       if (!publicKey) {
         throw new Error('Public key is required');

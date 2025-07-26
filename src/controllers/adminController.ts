@@ -40,10 +40,14 @@ export const createAdmin = async (req: AuthRequest, res: Response) => {
       isActive: true,
       kycStatus: 'verified' // Admins are automatically KYC verified
       ,
+
       nationality: '',
       investmentExperience: '',
       riskTolerance: '',
-      isVerified: false
+      isVerified: false,
+      salt: '',
+      otp: 0,
+      otp_expiry: undefined
     });
 
     // Remove password from response

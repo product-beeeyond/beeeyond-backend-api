@@ -1,16 +1,14 @@
-import { Request, Response, } from 'express';
-import { Op, Transaction as DbTransaction } from 'sequelize';
+import { Response, } from 'express';
+import { Op } from 'sequelize';
 import { sequelize } from '../config/database';
-import { authenticate, requireKYC, AuthRequest } from '../middleware/auth';
-import { validate, investmentSchema } from '../middleware/validation';
-import User from '../models/User';
+import { AuthRequest } from '../middleware/auth';
 import Property from '../models/Property';
 import Transaction from '../models/Transaction';
 import PropertyHolding from '../models/PropertyHolding';
 import Wallet from '../models/Wallet';
-import { stellarService } from '../services/stellarService';
+// import { stellarService } from '../services/stellarService';
 import { emailService } from '../services/emailService';
-import { smsService } from '../services/smsService';
+// import { smsService } from '../services/smsService';
 import logger from '../utils/logger';
 
 export const BuyPropertyToken = async (req: AuthRequest, res: Response) => {
@@ -93,12 +91,12 @@ export const BuyPropertyToken = async (req: AuthRequest, res: Response) => {
     // Update or create property holding
     const [holding] = await PropertyHolding.findOrCreate({
       where: { userId, propertyId },
-      defaults: {
-        tokensOwned: 0,
-        totalInvested: 0,
-        currentValue: 0,
-        averagePrice: 0,
-      },
+      // defaults: {
+      //   tokensOwned: 0,
+      //   totalInvested: 0,
+      //   currentValue: 0,
+      //   averagePrice: 0,
+      // },
       transaction: dbTransaction,
     });
 
@@ -115,7 +113,7 @@ export const BuyPropertyToken = async (req: AuthRequest, res: Response) => {
     }, { transaction: dbTransaction });
 
     // Process Stellar transaction if needed
-    let stellarTxHash = null;
+    let stellarTxHash = "";
     if (paymentMethod === 'stellar' && property.stellarAssetCode) {
       try {
         // This would require user's Stellar wallet integration
@@ -149,13 +147,13 @@ export const BuyPropertyToken = async (req: AuthRequest, res: Response) => {
         amount: totalAmount,
       });
 
-      if (req.user!.phone) {
-        await smsService.sendTransactionAlert(req.user!.phone, {
-          type: 'purchase',
-          quantity,
-          amount: totalAmount,
-        });
-      }
+      // if (req.user!.phone) {
+      //   await smsService.sendTransactionAlert(req.user!.phone, {
+      //     type: 'purchase',
+      //     quantity,
+      //     amount: totalAmount,
+      //   });
+      // }
     } catch (notificationError) {
       logger.error('Failed to send notifications:', notificationError);
     }
@@ -278,13 +276,13 @@ export const SellPropertyToken = async (req: AuthRequest, res: Response) => {
         amount: netAmount,
       });
 
-      if (req.user!.phone) {
-        await smsService.sendTransactionAlert(req.user!.phone, {
-          type: 'sale',
-          quantity,
-          amount: netAmount,
-        });
-      }
+      // if (req.user!.phone) {
+      //   await smsService.sendTransactionAlert(req.user!.phone, {
+      //     type: 'sale',
+      //     quantity,
+      //     amount: netAmount,
+      //   });
+      // }
     } catch (notificationError) {
       logger.error('Failed to send notifications:', notificationError);
     }

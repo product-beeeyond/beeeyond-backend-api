@@ -1,16 +1,22 @@
-import express, { Request, Response, NextFunction } from "express";
+import { Request, Response } from "express";
 import jwt from 'jsonwebtoken';
-import User, { UserAttributes } from '../models/User';
+import User from '../models/User';
 import { AuthRequest, UserRole } from "../middleware/auth";
 import logger from '../utils/logger';
 import { redisClient } from "../config/redis";
 import { emailService } from "../services/emailService";
-import { JWT_SECRET, JWT_EXPIRES_IN, JWT_REFRESH_SECRET, JWT_REFRESH_EXPIRES_IN } from "../config";
+import { JWT_REFRESH_SECRET } from "../config";
 import { v4 as uuidv4 } from 'uuid'
 import { GenerateOTP, GenerateRefreshToken, GenerateSignature } from "../utils";
+// import { smsService } from "../services/smsService";
+
 export const SignUp = async (req: Request, res: Response) => {
   try {
-    const { email, password, firstName, lastName, phone, referralCode } = req.body;
+    const { email, password, firstName, lastName, phone, referralCode,
+      nationality,
+      address,
+      investmentExperience,
+      riskTolerance } = req.body;
     const uuiduser = uuidv4();
     // Check if user already exists
     const existingUser = await User.findOne({ where: { email } });
@@ -35,7 +41,7 @@ export const SignUp = async (req: Request, res: Response) => {
       }
       referredBy = referrer?.id;
     }
-    const {otp, expiry} = GenerateOTP();
+    const { otp, expiry } = GenerateOTP();
     // Create user
     const user = await User.create({
       id: uuiduser,
@@ -47,13 +53,15 @@ export const SignUp = async (req: Request, res: Response) => {
       otp,
       otp_expiry: expiry,
       referredBy,
-      nationality: "",
-      investmentExperience: "",
-      riskTolerance: "",
-      kycStatus: "",
+      address,
+      nationality,
+      investmentExperience,
+      riskTolerance,
+      kycStatus: "pending",
       isVerified: false,
       isActive: false,
-      role: UserRole.USER
+      role: UserRole.USER,
+      salt: ""
     });
 
     const retrievedUser = (await User.findOne({
@@ -78,14 +86,21 @@ export const SignUp = async (req: Request, res: Response) => {
 
     // Send welcome email
     try {
-      await emailService.sendWelcomeEmail(user.email, user.firstName || 'User');
+      await emailService.sendOTP(user.email, user.firstName, String(otp), "verification");
     } catch (emailError) {
-      logger.error('Failed to send welcome email:', emailError);
+      logger.error('Failed to send otp via mail:', emailError);
     }
 
-    res.status(201).json({
-      message: 'User registered successfully',
-      user: retrievedUser?.toJSON(),
+    // try {
+    //   await smsService.sendOTP(user.phone!, String(otp))
+    // } catch (smsError) {
+    //   logger.error('Failed to send otp via sms:', smsError);
+    // }
+
+    res.status(200).json({
+      message: 'User registered successfully, verify otp',
+      // user: retrievedUser?.toJSON(),
+      verified: retrievedUser?.isVerified,
       tokens: {
         accessToken,
         refreshToken,
@@ -94,6 +109,237 @@ export const SignUp = async (req: Request, res: Response) => {
   } catch (error) {
     logger.error('Registration error:', error);
     res.status(500).json({ error: 'Registration failed' });
+  }
+}
+
+export const VerifyOTP = async (req: Request, res: Response) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      return res.status(400).json({ error: 'Email and OTP are required' });
+    }
+
+    // Find user
+    const user = await User.findOne({ where: { email } });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Check if user is already verified
+    if (user.isVerified) {
+      return res.status(400).json({ error: 'User is already verified' });
+    }
+
+    // Check if OTP is valid and not expired
+    if (!user.otp || user.otp !== parseInt(otp)) {
+      return res.status(400).json({ error: 'Invalid OTP' });
+    }
+
+    // Check if OTP is expired
+    if (!user.otp_expiry || new Date() > user.otp_expiry) {
+      return res.status(400).json({ error: 'OTP has expired' });
+    }
+
+    // Update user verification status
+    await user.update({
+      isVerified: true,
+      isActive: true,
+      otp: 0,
+      otp_expiry: new Date(),
+    });
+
+    // Generate new JWT tokens with updated verification status
+    const accessToken = await GenerateSignature({
+      id: user.id,
+      email: user.email,
+      verified: true,
+    });
+
+    const refreshToken = await GenerateRefreshToken({
+      id: user.id,
+      email: user.email,
+      verified: true,
+    });
+
+    // Update refresh token in Redis
+    await redisClient.setEx(`refresh:${user.id}`, 7 * 24 * 60 * 60, refreshToken);
+
+    res.json({
+      message: 'OTP verified successfully',
+      user: user.toJSON(),
+      tokens: {
+        accessToken,
+        refreshToken,
+      },
+    });
+  } catch (error) {
+    logger.error('OTP verification error:', error);
+    res.status(500).json({ error: 'OTP verification failed' });
+  }
+}
+
+export const ResendOTP = async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    // Find user
+    const user = await User.findOne({ where: { email } });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Check if user is already verified
+    if (user.isVerified) {
+      return res.status(400).json({ error: 'User is already verified' });
+    }
+
+    // Generate new OTP
+    const { otp, expiry } = GenerateOTP();
+
+    // Update user with new OTP
+    await user.update({
+      otp,
+      otp_expiry: expiry,
+    });
+
+    // Send OTP via email
+    try {
+      await emailService.sendOTP(user.email, user.firstName, String(otp), "verification");
+    } catch (emailError) {
+      logger.error('Failed to send OTP via email:', emailError);
+    }
+
+    // Send OTP via SMS if phone number exists
+    // if (user.phone) {
+    //   try {
+    //     await smsService.sendOTP(user.phone, String(otp));
+    //   } catch (smsError) {
+    //     logger.error('Failed to send OTP via SMS:', smsError);
+    //   }
+    // }
+
+    res.json({
+      message: 'OTP sent successfully',
+    });
+  } catch (error) {
+    logger.error('Resend OTP error:', error);
+    res.status(500).json({ error: 'Failed to resend OTP' });
+  }
+}
+
+export const ForgotPassword = async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    // Find user
+    const user = await User.findOne({ where: { email } });
+    if (!user) {
+      // Don't reveal if user exists or not for security
+      return res.json({
+        message: 'If an account with this email exists, a password reset OTP has been sent',
+      });
+    }
+
+    // Generate password reset OTP
+    const { otp, expiry } = GenerateOTP();
+
+    // Store password reset OTP in Redis with email as key
+    const resetKey = `password_reset:${email}`;
+    await redisClient.setEx(resetKey, 15 * 60, JSON.stringify({ otp, expiry: expiry.getTime() })); // 15 minutes
+
+    // Send password reset OTP via email
+    try {
+      await emailService.sendOTP(user.email, user.firstName, String(otp), "password_reset");
+    } catch (emailError) {
+      logger.error('Failed to send password reset OTP via email:', emailError);
+      return res.status(500).json({ error: 'Failed to send password reset OTP' });
+    }
+
+    // Send OTP via SMS if phone number exists
+    // if (user.phone) {
+    //   try {
+    //     await smsService.sendOTP(user.phone, String(otp));
+    //   } catch (smsError) {
+    //     logger.error('Failed to send password reset OTP via SMS:', smsError);
+    //   }
+    // }
+
+    res.json({
+      message: 'If an account with this email exists, a password reset OTP has been sent',
+    });
+  } catch (error) {
+    logger.error('Forgot password error:', error);
+    res.status(500).json({ error: 'Failed to process forgot password request' });
+  }
+}
+
+export const ResetPassword = async (req: Request, res: Response) => {
+  try {
+    const { email, otp, newPassword } = req.body;
+
+    if (!email || !otp || !newPassword) {
+      return res.status(400).json({ error: 'Email, OTP, and new password are required' });
+    }
+
+    // Retrieve password reset OTP from Redis
+    const resetKey = `password_reset:${email}`;
+    const storedData = await redisClient.get(resetKey);
+
+    if (!storedData) {
+      return res.status(400).json({ error: 'Invalid or expired password reset OTP' });
+    }
+
+    const { otp: storedOtp, expiry } = JSON.parse(storedData);
+
+    // Check if OTP matches
+    if (parseInt(otp) !== storedOtp) {
+      return res.status(400).json({ error: 'Invalid OTP' });
+    }
+
+    // Check if OTP is expired
+    if (new Date().getTime() > expiry) {
+      // Remove expired OTP from Redis
+      await redisClient.del(resetKey);
+      return res.status(400).json({ error: 'OTP has expired' });
+    }
+
+    // Find user
+    const user = await User.findOne({ where: { email } });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Update user password
+    await user.update({ password: newPassword });
+
+    // Remove password reset OTP from Redis
+    await redisClient.del(resetKey);
+
+    // Invalidate all existing refresh tokens by removing them from Redis
+    await redisClient.del(`refresh:${user.id}`);
+
+    // Send password change confirmation email
+    try {
+      // await emailService.sendPasswordChangeConfirmation(user.email, user.firstName);
+    } catch (emailError) {
+      logger.error('Failed to send password change confirmation email:', emailError);
+    }
+
+    res.json({
+      message: 'Password reset successfully',
+    });
+  } catch (error) {
+    logger.error('Reset password error:', error);
+    res.status(500).json({ error: 'Failed to reset password' });
   }
 }
 
@@ -112,22 +358,21 @@ export const Login = async (req: Request, res: Response) => {
     if (!isValidPassword) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
-
     // Update last login
     await user.update({ lastLogin: new Date() });
 
     // Generate JWT tokens
-    const accessToken = jwt.sign(
-      { id: user.id, email: user.email },
-      JWT_SECRET!,
-      { expiresIn: JWT_EXPIRES_IN }
-    );
+    const accessToken = await GenerateSignature({
+      id: user.id,
+      email: user.email,
+      verified: user.isVerified,
+    });
 
-    const refreshToken = jwt.sign(
-      { id: user.id },
-      JWT_REFRESH_SECRET!,
-      { expiresIn: JWT_REFRESH_EXPIRES_IN }
-    );
+    const refreshToken = await GenerateRefreshToken({
+      id: user.id,
+      email: user.email,
+      verified: user.isVerified,
+    });
 
     // Store refresh token in Redis
     await redisClient.setEx(`refresh:${user.id}`, 7 * 24 * 60 * 60, refreshToken);
@@ -145,7 +390,6 @@ export const Login = async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Login failed' });
   }
 }
-
 
 export const RefreshToken = async (req: Request, res: Response) => {
   try {
@@ -171,11 +415,11 @@ export const RefreshToken = async (req: Request, res: Response) => {
     }
 
     // Generate new access token
-    const newAccessToken = jwt.sign(
-      { id: user.id, email: user.email },
-      JWT_SECRET!,
-      { expiresIn: JWT_EXPIRES_IN }
-    );
+    const newAccessToken = await GenerateSignature({
+      id: user.id,
+      email: user.email,
+      verified: user.isVerified,
+    });
 
     res.json({
       accessToken: newAccessToken,
@@ -185,7 +429,6 @@ export const RefreshToken = async (req: Request, res: Response) => {
     res.status(401).json({ error: 'Invalid refresh token' });
   }
 }
-
 
 export const Logout = async (req: AuthRequest, res: Response) => {
   try {
@@ -208,7 +451,6 @@ export const Logout = async (req: AuthRequest, res: Response) => {
   }
 }
 
-
 export const GetCurrentUser = async (req: AuthRequest, res: Response) => {
   try {
     res.json({
@@ -229,7 +471,6 @@ export const UpdateUser = async (req: AuthRequest, res: Response) => {
       const existingPhone = await User.findOne({
         where: { phone },
         // Exclude current user
-        // @ts-ignore
         raw: false
       });
       if (existingPhone && existingPhone.id !== req.user!.id) {

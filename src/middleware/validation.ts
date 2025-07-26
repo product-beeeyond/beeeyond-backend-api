@@ -1,6 +1,22 @@
 import { Request, Response, NextFunction } from 'express';
 import Joi from 'joi';
+import { validationResult } from 'express-validator';
 
+export const handleValidationErrors = (req: Request, res: Response, next: NextFunction) => {
+  const errors = validationResult(req);
+
+  if (!errors.isEmpty()) {
+    return res.status(400).json({
+      error: 'Validation failed',
+      details: errors.array().map(error => ({
+        field: error.type === 'field' ? error.path : 'unknown',
+        message: error.msg
+      }))
+    });
+  }
+
+  next();
+};
 export const validate = (schema: Joi.ObjectSchema) => {
   return (req: Request, res: Response, next: NextFunction) => {
     const { error } = schema.validate(req.body, { abortEarly: false });
@@ -24,15 +40,21 @@ export const validate = (schema: Joi.ObjectSchema) => {
 export const registerSchema = Joi.object({
   email: Joi.string().email().required(),
   password: Joi.string().min(8).required(),
-  firstName: Joi.string().min(2).max(50).optional(),
-  lastName: Joi.string().min(2).max(50).optional(),
-  phone: Joi.string().pattern(/^\+?[1-9]\d{1,14}$/).optional(),
-  confirm_password: Joi.any()
+  firstName: Joi.string().min(2).max(50).required(),
+  lastName: Joi.string().min(2).max(50).required(),
+  phone: Joi.string().pattern(/^\+?[1-9]\d{1,14}$/).required(),
+  confirmPassword: Joi.any()
     .equal(Joi.ref("password"))
     .required()
-    .label("Confirm password")
+    .label("confirm_password")
     .messages({ "any.only": "{{#label}} does not match" }),
-  referralCode: Joi.string().optional(),
+  // These will only be validated if present in the payload
+  dateOfBirth: Joi.string(),
+  referralCode: Joi.string().min(1).max(20), // validates only if supplied
+  nationality: Joi.string().min(2).max(50),
+  address: Joi.string().min(5).max(250),
+  investmentExperience: Joi.string().valid('beginner', 'intermediate', 'advanced'),
+  riskTolerance: Joi.string().valid('low', 'medium', 'high'),
 });
 
 export const loginSchema = Joi.object({

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import twilio from 'twilio';
 import logger from '../utils/logger';
 import { TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER } from '../config';
@@ -99,7 +100,7 @@ class SMSService {
 
       logger.info(`OTP sent to ${phoneNumber}`);
     } catch (error) {
-      logger.error('Error sending OTP:', error);
+      logger.error('Error sending OTP in sms service:', error);
       throw error;
     }
   }

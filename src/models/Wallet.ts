@@ -14,7 +14,7 @@ interface WalletAttributes {
   updatedAt?: Date;
 }
 
-interface WalletCreationAttributes extends Optional<WalletAttributes, 'id' | 'createdAt' | 'updatedAt'> { }
+type WalletCreationAttributes = Optional<WalletAttributes, 'id' | 'createdAt' | 'updatedAt'>
 
 class Wallet extends Model<WalletAttributes, WalletCreationAttributes> implements WalletAttributes {
   public id!: string;
