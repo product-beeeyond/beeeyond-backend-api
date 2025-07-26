@@ -8,7 +8,7 @@ import PropertyHolding from '../models/PropertyHolding';
 import Wallet from '../models/Wallet';
 // import { stellarService } from '../services/stellarService';
 import { emailService } from '../services/emailService';
-import { smsService } from '../services/smsService';
+// import { smsService } from '../services/smsService';
 import logger from '../utils/logger';
 
 export const BuyPropertyToken = async (req: AuthRequest, res: Response) => {
@@ -147,13 +147,13 @@ export const BuyPropertyToken = async (req: AuthRequest, res: Response) => {
         amount: totalAmount,
       });
 
-      if (req.user!.phone) {
-        await smsService.sendTransactionAlert(req.user!.phone, {
-          type: 'purchase',
-          quantity,
-          amount: totalAmount,
-        });
-      }
+      // if (req.user!.phone) {
+      //   await smsService.sendTransactionAlert(req.user!.phone, {
+      //     type: 'purchase',
+      //     quantity,
+      //     amount: totalAmount,
+      //   });
+      // }
     } catch (notificationError) {
       logger.error('Failed to send notifications:', notificationError);
     }
@@ -276,13 +276,13 @@ export const SellPropertyToken = async (req: AuthRequest, res: Response) => {
         amount: netAmount,
       });
 
-      if (req.user!.phone) {
-        await smsService.sendTransactionAlert(req.user!.phone, {
-          type: 'sale',
-          quantity,
-          amount: netAmount,
-        });
-      }
+      // if (req.user!.phone) {
+      //   await smsService.sendTransactionAlert(req.user!.phone, {
+      //     type: 'sale',
+      //     quantity,
+      //     amount: netAmount,
+      //   });
+      // }
     } catch (notificationError) {
       logger.error('Failed to send notifications:', notificationError);
     }

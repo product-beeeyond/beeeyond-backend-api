@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Resend } from 'resend';
 import logger from '../utils/logger';
-import { RESEND_API_KEY, FRONTEND_URL } from '../config';
+import { RESEND_API_KEY, FRONTEND_URL, FROM_EMAIL } from '../config';
 
 class EmailService {
   private resend: Resend;
@@ -13,7 +13,7 @@ class EmailService {
   async sendWelcomeEmail(email: string, firstName: string): Promise<void> {
     try {
       await this.resend.emails.send({
-        from: 'Beeeyond <noreply@beeeyond.com>',
+        from: FROM_EMAIL as string,
         to: [email],
         subject: 'Welcome to Beeeyond - Start Your Real Estate Investment Journey',
         html: this.getWelcomeEmailTemplate(firstName),
@@ -33,7 +33,7 @@ class EmailService {
         : 'KYC Verification Update';
 
       await this.resend.emails.send({
-        from: 'Beeeyond <noreply@beeeyond.com>',
+        from: FROM_EMAIL as string,
         to: [email],
         subject,
         html: this.getKYCStatusEmailTemplate(firstName, status),
@@ -53,7 +53,7 @@ class EmailService {
   ): Promise<void> {
     try {
       await this.resend.emails.send({
-        from: 'Beeeyond <noreply@beeeyond.com>',
+        from: FROM_EMAIL as string,
         to: [email],
         subject: 'Transaction Confirmation',
         html: this.getTransactionEmailTemplate(firstName, transactionDetails),
@@ -80,13 +80,14 @@ class EmailService {
       };
 
       await this.resend.emails.send({
-        from: 'Beeeyond <noreply@beeeyond.com>',
+        from: FROM_EMAIL as string,
         to: [email],
         subject: subjects[purpose],
         html: this.getOTPEmailTemplate(firstName, otp, purpose),
       });
 
       logger.info(`OTP email sent to ${email} for ${purpose}`);
+      return;
     } catch (error) {
       logger.error('Error sending OTP email:', error);
       throw error;
