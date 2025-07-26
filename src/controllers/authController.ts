@@ -12,7 +12,11 @@ import { GenerateOTP, GenerateRefreshToken, GenerateSignature } from "../utils";
 
 export const SignUp = async (req: Request, res: Response) => {
   try {
-    const { email, password, firstName, lastName, phone, referralCode } = req.body;
+    const { email, password, firstName, lastName, phone, referralCode,
+      nationality,
+      address,
+      investmentExperience,
+      riskTolerance } = req.body;
     const uuiduser = uuidv4();
     // Check if user already exists
     const existingUser = await User.findOne({ where: { email } });
@@ -49,10 +53,11 @@ export const SignUp = async (req: Request, res: Response) => {
       otp,
       otp_expiry: expiry,
       referredBy,
-      nationality: "",
-      investmentExperience: "",
-      riskTolerance: "",
-      kycStatus: "",
+      address,
+      nationality,
+      investmentExperience,
+      riskTolerance,
+      kycStatus: "pending",
       isVerified: false,
       isActive: false,
       role: UserRole.USER,

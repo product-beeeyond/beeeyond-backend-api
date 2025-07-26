@@ -87,6 +87,7 @@ class EmailService {
       });
 
       logger.info(`OTP email sent to ${email} for ${purpose}`);
+      return;
     } catch (error) {
       logger.error('Error sending OTP email:', error);
       throw error;

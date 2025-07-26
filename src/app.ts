@@ -41,13 +41,13 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Health check
-app.get('/health', (req, res) => {
-  res.json({
-    status: 'OK',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime()
-  });
-});
+// app.get('/health', (req, res) => {
+//   res.json({
+//     status: 'OK',
+//     timestamp: new Date().toISOString(),
+//     uptime: process.uptime()
+//   });
+// });
 
 // API routes
 app.use('/api/v1', routes);
@@ -83,7 +83,7 @@ const startServer = async () => {
     logger.info('Database connection established successfully');
 
     // Sync database (be careful with force: true in production)
-    await sequelize.sync({ force: true });
+    await sequelize.sync({ force: false });
     logger.info('Database synchronized successfully');
 
     // Test Redis connection
@@ -92,7 +92,7 @@ const startServer = async () => {
 
     // Start server
     server.listen(SERVER_PORT, () => {
-      logger.info(`Server running on port ${SERVER_PORT} in ${NODE_ENV} mode`);
+      logger.info(`Server running on http://localhost:${SERVER_PORT} in ${NODE_ENV} mode`);
     });
 
   } catch (error) {
