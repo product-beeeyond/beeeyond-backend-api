@@ -232,6 +232,7 @@ export const ResendOTP = async (req: Request, res: Response) => {
   }
 }
 
+//request otp to reset password
 export const ForgotPassword = async (req: Request, res: Response) => {
   try {
     const { email } = req.body;
