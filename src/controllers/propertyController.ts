@@ -79,7 +79,6 @@ export const GetAllProperties = async (req: Request, res: Response) => {
       }
     });
 
-    // Calculate additional metrics for each property
     const propertiesWithMetrics = await Promise.all(
       properties.map(async (property) => {
         const [investorCount, transactionCount] = await Promise.all([
@@ -179,7 +178,6 @@ export const GetSingleProperty = async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Failed to fetch property details' });
   }
 }
-
 
 export const GetPropertyAnalytics = async (req: AuthRequest, res: Response) => {
   try {
