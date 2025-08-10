@@ -431,7 +431,6 @@ class StellarService {
       return false;
     }
   }
-
   // Get transaction history
   async getTransactionHistory(publicKey: string, limit: number = 10): Promise<Horizon.ServerApi.TransactionRecord[]> {
     try {

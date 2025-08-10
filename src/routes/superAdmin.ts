@@ -54,19 +54,10 @@ router.use(authenticate, requireSuperAdmin);
 // Create new admin user
 router.post('/create', validateCreateAdmin, createAdmin);
 
-// Get all admin users
 router.get('/list', getAllAdmins);
-
-// Update admin user
 router.put('/:adminId', validateAdminId, validateUpdateAdmin, updateAdmin);
-
-// Deactivate admin user
 router.patch('/:adminId/deactivate', validateAdminId, deactivateAdmin);
-
-// Promote regular user to admin
 router.patch('/promote/:userId', validateUserId, promoteToAdmin);
-
-// Demote admin to regular user
 router.patch('/:adminId/demote', validateAdminId, demoteAdmin);
 
 // Reset admin password
