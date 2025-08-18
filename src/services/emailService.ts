@@ -3,11 +3,75 @@ import { Resend } from 'resend';
 import logger from '../utils/logger';
 import { RESEND_API_KEY, FRONTEND_URL, FROM_EMAIL } from '../config';
 
+interface MultisigNotificationData {
+  proposalId: string;
+  description: string;
+  walletType: string;
+  propertyId?: string;
+}
+
+interface GovernanceNotificationData {
+  proposalId: string;
+  title: string;
+  propertyTitle: string;
+  votingEndAt: Date;
+}
+
+interface RevenueDistributionData {
+  propertyId: string;
+  totalRevenue: number;
+  userShare: number;
+  distributionPeriod: string;
+}
+
 class EmailService {
   private resend: Resend;
 
   constructor() {
     this.resend = new Resend(RESEND_API_KEY);
+  }
+
+  private stripHtml(html: string): string {
+    return html.replace(/<[^>]*>/g, '');
+  }
+
+  private getBaseTemplate(content: string): string {
+    return `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Beeeyond Platform</title>
+      <style>
+        .container { max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif; }
+        .header { background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); color: white; padding: 20px; text-align: center; }
+        .content { padding: 30px; background: #f8f9fa; }
+        .footer { background: #333; color: white; padding: 20px; text-align: center; font-size: 12px; }
+        .button { display: inline-block; background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; margin: 10px 0; }
+        .alert { padding: 15px; margin: 15px 0; border-radius: 5px; }
+        .alert-info { background: #d1ecf1; border: 1px solid #bee5eb; color: #0c5460; }
+        .alert-warning { background: #fff3cd; border: 1px solid #ffeaa7; color: #856404; }
+        .alert-success { background: #d4edda; border: 1px solid #c3e6cb; color: #155724; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>🏢 Beeeyond</h1>
+          <p>Real Estate Investment Made Simple</p>
+        </div>
+        <div class="content">
+          ${content}
+        </div>
+        <div class="footer">
+          <p>&copy; 2025 Beeeyond. All rights reserved.</p>
+          <p><a href="${FRONTEND_URL}" style="color: #2563eb;">Visit Platform</a></p>
+        </div>
+      </div>
+    </body>
+    </html>
+    `;
   }
 
   async sendWelcomeEmail(email: string, firstName: string): Promise<void> {
@@ -93,6 +157,283 @@ class EmailService {
       throw error;
     }
   }
+
+  // ===========================================
+  // MULTISIG NOTIFICATIONS
+  // ===========================================
+
+  async sendMultisigNotification(
+    email: string,
+    firstName: string,
+    notificationType: 'new_proposal' | 'ready_for_execution' | 'executed' | 'expired',
+    data: MultisigNotificationData
+  ): Promise<void> {
+    try {
+      let subject = '';
+      let content = '';
+
+      switch (notificationType) {
+        case 'new_proposal':
+          subject = '🔒 New Multisig Transaction Proposal';
+          content = `
+            <h2>New Multisig Transaction Proposal</h2>
+            <p>Hello ${firstName},</p>
+            <p>A new multisig transaction has been proposed that requires your signature:</p>
+            
+            <div class="alert alert-info">
+              <strong>Proposal ID:</strong> ${data.proposalId}<br>
+              <strong>Description:</strong> ${data.description}<br>
+              <strong>Wallet Type:</strong> ${data.walletType}<br>
+              ${data.propertyId ? `<strong>Property ID:</strong> ${data.propertyId}<br>` : ''}
+            </div>
+
+            <p>Please review and sign this transaction if you approve.</p>
+            <a href="${FRONTEND_URL}/multisig/proposals/${data.proposalId}" class="button">
+              Review Proposal
+            </a>
+
+            <div class="alert alert-warning">
+              <strong>Important:</strong> Only sign transactions you understand and approve of. 
+              Verify all details before signing.
+            </div>
+          `;
+          break;
+
+        case 'ready_for_execution':
+          subject = '✅ Multisig Transaction Ready for Execution';
+          content = `
+            <h2>Transaction Ready for Execution</h2>
+            <p>Hello ${firstName},</p>
+            <p>A multisig transaction has received enough signatures and is ready for execution:</p>
+            
+            <div class="alert alert-success">
+              <strong>Proposal ID:</strong> ${data.proposalId}<br>
+              <strong>Description:</strong> ${data.description}<br>
+              <strong>Wallet Type:</strong> ${data.walletType}
+            </div>
+
+            <a href="${FRONTEND_URL}/multisig/proposals/${data.proposalId}" class="button">
+              Execute Transaction
+            </a>
+          `;
+          break;
+
+        case 'executed':
+          subject = '🎉 Multisig Transaction Executed';
+          content = `
+            <h2>Transaction Successfully Executed</h2>
+            <p>Hello ${firstName},</p>
+            <p>A multisig transaction has been successfully executed:</p>
+            
+            <div class="alert alert-success">
+              <strong>Proposal ID:</strong> ${data.proposalId}<br>
+              <strong>Description:</strong> ${data.description}<br>
+              <strong>Status:</strong> Completed
+            </div>
+
+            <a href="${FRONTEND_URL}/multisig/history" class="button">
+              View Transaction History
+            </a>
+          `;
+          break;
+
+        case 'expired':
+          subject = '⏰ Multisig Transaction Expired';
+          content = `
+            <h2>Transaction Proposal Expired</h2>
+            <p>Hello ${firstName},</p>
+            <p>A multisig transaction proposal has expired without receiving enough signatures:</p>
+            
+            <div class="alert alert-warning">
+              <strong>Proposal ID:</strong> ${data.proposalId}<br>
+              <strong>Description:</strong> ${data.description}<br>
+              <strong>Status:</strong> Expired
+            </div>
+
+            <p>If this transaction is still needed, a new proposal must be created.</p>
+          `;
+          break;
+      }
+
+      const html = this.getBaseTemplate(content);
+      
+      await this.resend.emails.send({
+        from: FROM_EMAIL as string,
+        to: [email],
+        subject,
+        html,
+      });
+
+      logger.info(`Multisig notification email sent to ${email}: ${notificationType}`);
+    } catch (error) {
+      logger.error('Error sending multisig notification email:', error);
+      throw error;
+    }
+  }
+
+  // ===========================================
+  // GOVERNANCE NOTIFICATIONS
+  // ===========================================
+
+  async sendGovernanceNotification(
+    email: string,
+    firstName: string,
+    notificationType: 'new_proposal' | 'voting_reminder' | 'proposal_passed' | 'proposal_rejected',
+    data: GovernanceNotificationData
+  ): Promise<void> {
+    try {
+      let subject = '';
+      let content = '';
+
+      switch (notificationType) {
+        case 'new_proposal':
+          subject = '🗳️ New Governance Proposal';
+          content = `
+            <h2>New Governance Proposal</h2>
+            <p>Hello ${firstName},</p>
+            <p>A new governance proposal has been created for a property you own tokens in:</p>
+            
+            <div class="alert alert-info">
+              <strong>Property:</strong> ${data.propertyTitle}<br>
+              <strong>Proposal:</strong> ${data.title}<br>
+              <strong>Voting Ends:</strong> ${data.votingEndAt.toLocaleDateString()} at ${data.votingEndAt.toLocaleTimeString()}
+            </div>
+
+            <p>Your participation in governance helps shape the future of your investment.</p>
+            
+            <a href="${FRONTEND_URL}/governance/proposals/${data.proposalId}" class="button">
+              Vote Now
+            </a>
+
+            <div class="alert alert-warning">
+              <strong>Reminder:</strong> Voting power is proportional to your token holdings.
+            </div>
+          `;
+          break;
+
+        case 'voting_reminder':
+          subject = '⏰ Governance Voting Reminder';
+          content = `
+            <h2>Don't Forget to Vote!</h2>
+            <p>Hello ${firstName},</p>
+            <p>Voting is ending soon for this governance proposal:</p>
+            
+            <div class="alert alert-warning">
+              <strong>Property:</strong> ${data.propertyTitle}<br>
+              <strong>Proposal:</strong> ${data.title}<br>
+              <strong>Voting Ends:</strong> ${data.votingEndAt.toLocaleDateString()} at ${data.votingEndAt.toLocaleTimeString()}
+            </div>
+
+            <a href="${FRONTEND_URL}/governance/proposals/${data.proposalId}" class="button">
+              Cast Your Vote
+            </a>
+          `;
+          break;
+
+        case 'proposal_passed':
+          subject = '✅ Governance Proposal Passed';
+          content = `
+            <h2>Proposal Approved by Token Holders</h2>
+            <p>Hello ${firstName},</p>
+            <p>A governance proposal you voted on has passed:</p>
+            
+            <div class="alert alert-success">
+              <strong>Property:</strong> ${data.propertyTitle}<br>
+              <strong>Proposal:</strong> ${data.title}<br>
+              <strong>Status:</strong> Approved for execution
+            </div>
+
+            <p>Implementation will begin according to the proposal timeline.</p>
+          `;
+          break;
+
+        case 'proposal_rejected':
+          subject = '❌ Governance Proposal Rejected';
+          content = `
+            <h2>Proposal Not Approved</h2>
+            <p>Hello ${firstName},</p>
+            <p>A governance proposal did not receive enough support:</p>
+            
+            <div class="alert alert-warning">
+              <strong>Property:</strong> ${data.propertyTitle}<br>
+              <strong>Proposal:</strong> ${data.title}<br>
+              <strong>Status:</strong> Rejected
+            </div>
+
+            <p>The proposal will not be implemented. Thank you for participating in governance.</p>
+          `;
+          break;
+      }
+
+      const html = this.getBaseTemplate(content);
+      
+      await this.resend.emails.send({
+        from: FROM_EMAIL as string,
+        to: [email],
+        subject,
+        html,
+      });
+
+      logger.info(`Governance notification email sent to ${email}: ${notificationType}`);
+    } catch (error) {
+      logger.error('Error sending governance notification email:', error);
+      throw error;
+    }
+  }
+
+  // ===========================================
+  // REVENUE DISTRIBUTION NOTIFICATIONS
+  // ===========================================
+
+  async sendRevenueDistributionNotification(
+    email: string,
+    firstName: string,
+    data: RevenueDistributionData
+  ): Promise<void> {
+    try {
+      const subject = '💰 Revenue Distribution Notification';
+      const content = `
+        <h2>Revenue Distribution</h2>
+        <p>Hello ${firstName},</p>
+        <p>Great news! A revenue distribution has been processed for one of your property investments.</p>
+        
+        <div class="alert alert-success">
+          <strong>Property ID:</strong> ${data.propertyId}<br>
+          <strong>Total Revenue:</strong> ₦${data.totalRevenue.toLocaleString()}<br>
+          <strong>Your Share:</strong> ₦${data.userShare.toLocaleString()}<br>
+          <strong>Distribution Period:</strong> ${data.distributionPeriod}
+        </div>
+
+        <p>The distribution will be processed to your Stellar wallet within 24 hours.</p>
+
+        <a href="${FRONTEND_URL}/portfolio" class="button">
+          View Portfolio
+        </a>
+
+        <div class="alert alert-info">
+          <strong>Note:</strong> This distribution is based on your token holdings at the time of the snapshot.
+        </div>
+      `;
+
+      const html = this.getBaseTemplate(content);
+      
+      await this.resend.emails.send({
+        from: FROM_EMAIL as string,
+        to: [email],
+        subject,
+        html,
+      });
+
+      logger.info(`Revenue distribution notification email sent to ${email}`);
+    } catch (error) {
+      logger.error('Error sending revenue distribution notification email:', error);
+      throw error;
+    }
+  }
+
+  // ===========================================
+  // EXISTING TEMPLATE METHODS
+  // ===========================================
 
   private getWelcomeEmailTemplate(firstName: string): string {
     return `
