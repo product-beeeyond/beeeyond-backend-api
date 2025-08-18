@@ -287,17 +287,6 @@ export const resetAdminPassword = async (req: AuthRequest, res: Response) => {
   }
 };
 
-// Helper functions for email notifications
-// const sendWelcomeEmail = async (data: {
-//   email: string;
-//   firstName: string;
-//   role: string;
-//   // temporaryPassword: string;
-// }) => {
-//   // Implement your email service here
-//   console.log(`Sending welcome email to ${data.email} for ${data.role} role`);
-// };
-
 const sendPromotionEmail = async (data: {
   email: string;
   firstName: string;
