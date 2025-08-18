@@ -5,7 +5,7 @@ import investmentRoutes from './investments';
 import adminRoutes from "./admin";
 import superAdminRoutes from "./superAdmin";
 import userRoutes from "./user";
-// Import other route modules as they're created
+// import multisigRoutes from './multisig'; 
 
 const router = Router();
 
@@ -24,5 +24,6 @@ router.use('/investments', investmentRoutes);
 router.use('/user', userRoutes);
 router.use('/admin', adminRoutes);
 router.use('/super-admin', superAdminRoutes);
+// router.use('/multisig', multisigRoutes);
 
 export default router;
