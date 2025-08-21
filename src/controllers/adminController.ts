@@ -6,6 +6,8 @@ import User from '../models/User';
 // import { sendWelcomeEmail } from '../utils/email';
 import { BCRYPT_ROUNDS } from '../config';
 import { emailService } from '../services/emailService';
+import logger from '../utils/logger';
+import RecoveryAuditLog from '../models/RecoveryAuditLog';
 // Create admin user - Super Admin only
 export const createAdmin = async (req: AuthRequest, res: Response) => {
   try {
@@ -302,4 +304,413 @@ const sendPasswordResetNotification = async (data: {
 }) => {
   // Implement your email service here
   console.log(`Sending password reset notification to ${data.email}`);
+};
+
+
+/**
+ * Get recovery audit log
+ * GET /api/admin/recovery/:requestId/audit
+ */
+export const getRecoveryAuditLog = async (req: AuthRequest, res: Response) => {
+  try {
+    const { requestId } = req.params;
+
+    // Verify admin role
+    if (!['admin', 'super_admin'].includes(req.user!.role)) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const auditLogs = await RecoveryAuditLog.findAll({
+      where: { recoveryRequestId: requestId },
+      include: [
+        {
+          model: User,
+          as: 'performer',
+          attributes: ['id', 'email', 'firstName', 'lastName', 'role']
+        }
+      ],
+      order: [['performedAt', 'ASC']]
+    });
+
+    res.json({
+      auditLogs: auditLogs.map(log => ({
+        id: log.id,
+        actionType: log.actionType,
+        performedBy: log.performedBy,
+        performedAt: log.performedAt,
+        details: log.details,
+        ipAddress: log.ipAddress,
+        userAgent: log.userAgent
+      }))
+    });
+
+  } catch (error) {
+    logger.error('Get audit log error:', error);
+    res.status(500).json({ 
+      error: 'Failed to get audit log',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+};
+/**
+ * Admin approves recovery request
+ * POST /api/admin/recovery/:requestId/approve
+ */
+export const approveRecoveryRequest = async (req: AuthRequest, res: Response) => {
+  try {
+    const { requestId } = req.params;
+    const adminId = req.user!.id;
+    const adminEmail = req.user!.email;
+
+    // Verify admin role
+    if (!['admin', 'super_admin'].includes(req.user!.role)) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const recoveryRequest = await RecoveryRequest.findByPk(requestId, {
+      include: [
+        {
+          model: MultiSigWallet,
+          as: 'wallet',
+          include: [{
+            model: MultiSigSigner,
+            as: 'signers',
+            where: { role: 'user', status: 'active' }
+          }]
+        }
+      ]
+    });
+
+    if (!recoveryRequest) {
+      return res.status(404).json({ error: 'Recovery request not found' });
+    }
+
+    if (recoveryRequest.status !== 'pending') {
+      return res.status(400).json({ 
+        error: `Cannot approve request with status: ${recoveryRequest.status}` 
+      });
+    }
+
+    // Check if admin already approved
+    const alreadyApproved = recoveryRequest.approvedBy.some(
+      approval => approval.adminId === adminId
+    );
+
+    if (alreadyApproved) {
+      return res.status(409).json({ error: 'You have already approved this request' });
+    }
+
+    // Add approval
+    const updatedApprovals = [
+      ...recoveryRequest.approvedBy,
+      {
+        adminId,
+        adminEmail,
+        approvedAt: new Date().toISOString()
+      }
+    ];
+
+    const newApprovalCount = updatedApprovals.length;
+
+    await recoveryRequest.update({
+      approvedBy: updatedApprovals,
+      currentApprovals: newApprovalCount,
+      status: newApprovalCount >= recoveryRequest.requiredApprovals ? 'approved' : 'pending'
+    });
+
+    // Log the approval
+    await RecoveryAuditLog.create({
+      recoveryRequestId: requestId,
+      actionType: 'approved',
+      performedBy: adminId,
+      performedAt: new Date(),
+      details: {
+        approvalCount: newApprovalCount,
+        requiredApprovals: recoveryRequest.requiredApprovals,
+        fullyApproved: newApprovalCount >= recoveryRequest.requiredApprovals
+      },
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent')
+    });
+
+    // If fully approved and time-lock passed, execute recovery automatically
+    if (newApprovalCount >= recoveryRequest.requiredApprovals) {
+      const now = new Date();
+      if (now >= recoveryRequest.executableAfter) {
+        // Execute recovery asynchronously
+        setImmediate(() => executeRecoveryAutomatically(recoveryRequest));
+      }
+    }
+
+    logger.info(`Recovery request ${requestId} approved by admin ${adminEmail} (${newApprovalCount}/${recoveryRequest.requiredApprovals})`);
+
+    res.json({
+      message: 'Recovery request approved successfully',
+      approvalCount: newApprovalCount,
+      requiredApprovals: recoveryRequest.requiredApprovals,
+      fullyApproved: newApprovalCount >= recoveryRequest.requiredApprovals,
+      status: recoveryRequest.status
+    });
+
+  } catch (error) {
+    logger.error('Approve recovery error:', error);
+    res.status(500).json({ 
+      error: 'Failed to approve recovery request',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+};
+
+/**
+ * Admin rejects recovery request
+ * POST /api/admin/recovery/:requestId/reject
+ */
+export const rejectRecoveryRequest = async (req: AuthRequest, res: Response) => {
+  try {
+    const { requestId } = req.params;
+    const { reason } = req.body;
+    const adminId = req.user!.id;
+
+    // Verify admin role
+    if (!['admin', 'super_admin'].includes(req.user!.role)) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    if (!reason || reason.trim().length < 5) {
+      return res.status(400).json({ error: 'Rejection reason is required (min 5 characters)' });
+    }
+
+    const recoveryRequest = await RecoveryRequest.findByPk(requestId);
+
+    if (!recoveryRequest) {
+      return res.status(404).json({ error: 'Recovery request not found' });
+    }
+
+    if (recoveryRequest.status !== 'pending') {
+      return res.status(400).json({ 
+        error: `Cannot reject request with status: ${recoveryRequest.status}` 
+      });
+    }
+
+    await recoveryRequest.update({
+      status: 'rejected',
+      metadata: {
+        ...recoveryRequest.metadata,
+        rejectionReason: reason.trim(),
+        rejectedBy: adminId,
+        rejectedAt: new Date().toISOString()
+      }
+    });
+
+    // Log the rejection
+    await RecoveryAuditLog.create({
+      recoveryRequestId: requestId,
+      actionType: 'rejected',
+      performedBy: adminId,
+      performedAt: new Date(),
+      details: {
+        reason: reason.trim()
+      },
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent')
+    });
+
+    logger.info(`Recovery request ${requestId} rejected by admin ${req.user!.email}`);
+
+    res.json({
+      message: 'Recovery request rejected successfully',
+      status: 'rejected'
+    });
+
+  } catch (error) {
+    logger.error('Reject recovery error:', error);
+    res.status(500).json({ 
+      error: 'Failed to reject recovery request',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+};
+
+/**
+ * Admin lists all recovery requests
+ * GET /api/admin/recovery/requests
+ */
+export const listAllRecoveryRequests = async (req: AuthRequest, res: Response) => {
+  try {
+    // Verify admin role
+    if (!['admin', 'super_admin'].includes(req.user!.role)) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const { status, userId, page = '1', limit = '20' } = req.query;
+
+    const pageNum = parseInt(page as string);
+    const limitNum = parseInt(limit as string);
+    const offset = (pageNum - 1) * limitNum;
+
+    const whereClause: any = {};
+    if (status) {
+      whereClause.status = status;
+    }
+    if (userId) {
+      whereClause.userId = userId;
+    }
+
+    const { count, rows: requests } = await RecoveryRequest.findAndCountAll({
+      where: whereClause,
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id', 'email', 'firstName', 'lastName']
+        },
+        {
+          model: MultiSigWallet,
+          as: 'wallet',
+          attributes: ['stellarPublicKey', 'walletType', 'status']
+        }
+      ],
+      order: [['createdAt', 'DESC']],
+      limit: limitNum,
+      offset
+    });
+
+    res.json({
+      recoveryRequests: requests,
+      pagination: {
+        total: count,
+        page: pageNum,
+        pages: Math.ceil(count / limitNum),
+        limit: limitNum
+      }
+    });
+
+  } catch (error) {
+    logger.error('List all recovery requests error:', error);
+    res.status(500).json({ 
+      error: 'Failed to list recovery requests',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+};
+
+/**
+ * Admin retries failed recovery
+ * POST /api/admin/recovery/:requestId/retry
+ */
+export const retryFailedRecovery = async (req: AuthRequest, res: Response) => {
+  try {
+    const { requestId } = req.params;
+    const adminId = req.user!.id;
+
+    // Verify admin role
+    if (!['admin', 'super_admin'].includes(req.user!.role)) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const recoveryRequest = await RecoveryRequest.findByPk(requestId, {
+      include: [
+        {
+          model: MultiSigWallet,
+          as: 'wallet',
+          include: [{
+            model: MultiSigSigner,
+            as: 'signers',
+            where: { role: 'user', status: 'active' }
+          }]
+        }
+      ]
+    });
+
+    if (!recoveryRequest) {
+      return res.status(404).json({ error: 'Recovery request not found' });
+    }
+
+    if (recoveryRequest.status !== 'failed') {
+      return res.status(400).json({ 
+        error: `Can only retry failed recovery requests. Current status: ${recoveryRequest.status}` 
+      });
+    }
+
+    // Check if sufficient approvals and time-lock
+    if (recoveryRequest.currentApprovals < recoveryRequest.requiredApprovals) {
+      return res.status(400).json({ 
+        error: 'Insufficient approvals for retry' 
+      });
+    }
+
+    const now = new Date();
+    if (now < recoveryRequest.executableAfter) {
+      return res.status(400).json({ 
+        error: 'Time-lock period has not yet passed' 
+      });
+    }
+
+    if (now > recoveryRequest.expiresAt) {
+      await recoveryRequest.update({ status: 'expired' });
+      
+      // Log expiration
+      await RecoveryAuditLog.create({
+        recoveryRequestId: requestId,
+        actionType: 'expired',
+        performedBy: adminId,
+        performedAt: now,
+        details: { 
+          reason: 'Expired during retry attempt',
+          expiredBy: 'admin'
+        },
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent')
+      });
+
+      return res.status(400).json({ 
+        error: 'Recovery request has expired' 
+      });
+    }
+
+    // Check retry limits (optional - prevent infinite retries)
+    const MAX_RETRIES = 5;
+    if (recoveryRequest.retryCount >= MAX_RETRIES) {
+      return res.status(400).json({ 
+        error: `Maximum retry attempts (${MAX_RETRIES}) reached` 
+      });
+    }
+
+    // Log retry attempt
+    await RecoveryAuditLog.create({
+      recoveryRequestId: requestId,
+      actionType: 'retry_attempted',
+      performedBy: adminId,
+      performedAt: now,
+      details: {
+        retryCount: recoveryRequest.retryCount + 1,
+        previousFailureReason: recoveryRequest.failureReason,
+        initiatedByAdmin: req.user!.email
+      },
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent')
+    });
+
+    // Execute recovery with retry
+    const result = await executeRecoveryProcess(recoveryRequest, adminId);
+
+    logger.info(`Recovery retry ${recoveryRequest.retryCount + 1} for request ${requestId} by admin ${req.user!.email}: ${result.success ? 'SUCCESS' : 'FAILED'}`);
+
+    res.json({
+      message: result.success ? 'Recovery executed successfully' : 'Recovery execution failed',
+      success: result.success,
+      transactionHash: result.transactionHash,
+      error: result.error,
+      retryCount: recoveryRequest.retryCount + 1,
+      maxRetries: MAX_RETRIES,
+      canRetryAgain: result.success ? false : (recoveryRequest.retryCount + 1) < MAX_RETRIES
+    });
+
+  } catch (error) {
+    logger.error('Retry recovery error:', error);
+    res.status(500).json({ 
+      error: 'Failed to retry recovery',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
 };

@@ -2017,6 +2017,97 @@ class StellarService {
       return null;
     }
   }
+
+  /**
+ * Create time-locked recovery transaction
+ */
+async createRecoveryTransaction(params: {
+  walletPublicKey: string;
+  oldUserPublicKey: string;
+  newUserPublicKey: string;
+  recoveryRequestId: string;
+}): Promise<{transaction: any, xdr: string}> {
+  try {
+    const account = await this.server.loadAccount(params.walletPublicKey);
+
+    const transaction = new TransactionBuilder(account, {
+      fee: BASE_FEE,
+      networkPassphrase: this.network,
+    })
+      // Remove old user signer
+      .addOperation(
+        Operation.setOptions({
+          signer: {
+            ed25519PublicKey: params.oldUserPublicKey,
+            weight: 0, // Setting weight to 0 removes the signer
+          },
+        })
+      )
+      // Add new user signer
+      .addOperation(
+        Operation.setOptions({
+          signer: {
+            ed25519PublicKey: params.newUserPublicKey,
+            weight: 2,
+          },
+        })
+      )
+      .setTimeout(180)
+      .build();
+
+    // Sign with platform recovery key
+    transaction.sign(this.recoveryKeypair);
+
+    logger.info(`Recovery transaction created for request: ${params.recoveryRequestId}`);
+
+    return {
+      transaction,
+      xdr: transaction.toXDR()
+    };
+
+  } catch (error) {
+    logger.error('Error creating recovery transaction:', error);
+    throw error;
+  }
+}
+
+/**
+ * Execute recovery transaction with retry logic
+ */
+async executeRecoveryTransaction(params: {
+  walletPublicKey: string;
+  oldUserPublicKey: string;
+  newUserPublicKey: string;
+  recoveryRequestId: string;
+  retryCount?: number;
+}): Promise<{
+  success: boolean;
+  transactionHash?: string;
+  error?: string;
+}> {
+  try {
+    const { transaction } = await this.createRecoveryTransaction(params);
+    
+    // Submit transaction with fee bump sponsorship
+    const result = await this.submitTransactionWithFeeBump(transaction, this.recoveryKeypair);
+
+    logger.info(`Recovery transaction executed successfully: ${result.hash}`);
+
+    return {
+      success: true,
+      transactionHash: result.hash
+    };
+
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    logger.error(`Recovery transaction failed (attempt ${(params.retryCount || 0) + 1}):`, error);
+
+    return {
+      success: false,
+      error: errorMessage
+    };
+  }
+}
 }
 
 export const stellarService = new StellarService();

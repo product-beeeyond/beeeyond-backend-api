@@ -38,6 +38,11 @@ export const STELLAR_DISTRIBUTION_SECRET =
 export const STELLAR_PLATFORM_SECRET = process.env.STELLAR_PLATFORM_SECRET!;
 export const STELLAR_RECOVERY_SECRET = process.env.STELLAR_RECOVERY_SECRET!;
 export const STELLAR_TREASURY_SECRET = process.env.STELLAR_TREASURY_SECRET!;
+
+export const RECOVERY_TIME_LOCK_HOURS = parseInt(String(process.env.RECOVERY_TIME_LOCK_HOURS));
+export const RECOVERY_EXPIRY_HOURS = parseInt(String(process.env.RECOVERY_EXPIRY_HOURS));
+export const RECOVERY_REQUIRED_APPROVALS = parseInt(String(process.env.RECOVERY_REQUIRED_APPROVALS));
+
 // Email Services
 export const RESEND_API_KEY = process.env.RESEND_API_KEY;
 export const FROM_EMAIL = process.env.FROM_EMAIL;
