@@ -125,6 +125,70 @@ export const getRecoveryStatus = async (req: AuthRequest, res: Response) => {
   }
 };
 
+
+/**
+ * Cancel pending recovery request (new function)
+ * DELETE /api/recovery/:requestId
+ */
+export const cancelRecoveryRequest = async (req: AuthRequest, res: Response) => {
+  try {
+    const { requestId } = req.params;
+    const userId = req.user!.id;
+
+    const recoveryRequest = await RecoveryRequest.findOne({
+      where: { 
+        id: requestId,
+        userId: userId,
+        status: 'pending' // Can only cancel pending requests
+      }
+    });
+
+    if (!recoveryRequest) {
+      return res.status(404).json({ 
+        error: 'Pending recovery request not found' 
+      });
+    }
+
+    // Update status to rejected
+    await recoveryRequest.update({
+      status: 'rejected',
+      metadata: {
+        ...recoveryRequest.metadata,
+        cancellationReason: 'User cancelled request',
+        cancelledBy: userId,
+        cancelledAt: new Date().toISOString()
+      }
+    });
+
+    // Log the cancellation
+    await RecoveryAuditLog.create({
+      recoveryRequestId: requestId,
+      actionType: 'rejected',
+      performedBy: userId,
+      performedAt: new Date(),
+      details: {
+        reason: 'User cancelled request',
+        cancelledByUser: true
+      },
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent')
+    });
+
+    logger.info(`Recovery request ${requestId} cancelled by user ${userId}`);
+
+    res.json({
+      message: 'Recovery request cancelled successfully',
+      status: 'rejected'
+    });
+
+  } catch (error) {
+    logger.error('Cancel recovery request error:', error);
+    res.status(500).json({ 
+      error: 'Failed to cancel recovery request',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+};
 /**
  * List user's recovery requests
  * GET /api/recovery/requests

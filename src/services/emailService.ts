@@ -641,6 +641,82 @@ class EmailService {
     </html>
     `;
   }
+
+
+// src/templates/emails/recovery-rejected.hbs
+/*
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Recovery Request Rejected</title>
+</head>
+<body>
+    <h2>❌ Your Wallet Recovery Request Has Been Rejected</h2>
+    
+    <p>Hello {{userName}},</p>
+    
+    <p>We regret to inform you that your wallet recovery request has been rejected by our admin team.</p>
+    
+    <div style="background: #f8d7da; padding: 15px; margin: 20px 0; border-radius: 5px; border-left: 4px solid #dc3545;">
+        <h3>Rejection Details:</h3>
+        <p><strong>Reason:</strong> {{reason}}</p>
+        <p><strong>Rejected By:</strong> {{rejectedBy}}</p>
+        <p><strong>Rejected At:</strong> {{rejectedAt}}</p>
+        <p><strong>Request ID:</strong> {{recoveryRequestId}}</p>
+    </div>
+    
+    <p>If you believe this rejection was made in error or if you have additional information that might help, you may submit a new recovery request.</p>
+    
+    <p>
+        <a href="{{newRequestUrl}}" style="background: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
+            Submit New Request
+        </a>
+    </p>
+    
+    <p>For questions about this decision, please contact our support team.</p>
+    
+    <p>Best regards,<br>Beeeyond Security Team</p>
+</body>
+</html>
+*/
+
+// src/templates/emails/recovery-force-executed.hbs
+/*
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ALERT: Force Recovery Execution</title>
+</head>
+<body>
+    <h2>⚠️ SECURITY ALERT: Force Recovery Execution</h2>
+    
+    <p>Hello {{adminName}},</p>
+    
+    <p><strong>ALERT:</strong> A wallet recovery has been force executed, bypassing normal security protocols.</p>
+    
+    <div style="background: #fff3cd; padding: 15px; margin: 20px 0; border-radius: 5px; border-left: 4px solid #ffc107;">
+        <h3>Force Execution Details:</h3>
+        <p><strong>User:</strong> {{userName}} ({{userEmail}})</p>
+        <p><strong>Executed By:</strong> {{executedBy}}</p>
+        <p><strong>Reason:</strong> {{reason}}</p>
+        <p><strong>Request ID:</strong> {{recoveryRequestId}}</p>
+        <p><strong>Timestamp:</strong> {{executedAt}}</p>
+    </div>
+    
+    <p><strong>WARNING:</strong> This action bypassed the normal approval and time-lock requirements. Please review this action immediately.</p>
+    
+    <p>
+        <a href="{{dashboardUrl}}" style="background: #dc3545; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
+            Review Force Execution
+        </a>
+    </p>
+    
+    <p>If this action was not authorized, please escalate immediately.</p>
+    
+    <p>Security Team,<br>Beeeyond Platform</p>
+</body>
+</html>
+*/
 }
 
 export const emailService = new EmailService();

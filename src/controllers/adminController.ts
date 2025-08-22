@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { AuthRequest, UserRole } from '../middleware/auth';
@@ -8,6 +9,10 @@ import { BCRYPT_ROUNDS } from '../config';
 import { emailService } from '../services/emailService';
 import logger from '../utils/logger';
 import RecoveryAuditLog from '../models/RecoveryAuditLog';
+import MultiSigWallet from '../models/MultiSigWallet';
+import RecoveryRequest from '../models/RecoveryRequest';
+import MultiSigSigner from '../models/MultiSigSigner';
+import { executeRecoveryProcess } from '../jobs/recoveryJobs';
 // Create admin user - Super Admin only
 export const createAdmin = async (req: AuthRequest, res: Response) => {
   try {
@@ -433,12 +438,40 @@ export const approveRecoveryRequest = async (req: AuthRequest, res: Response) =>
       userAgent: req.get('User-Agent')
     });
 
-    // If fully approved and time-lock passed, execute recovery automatically
+// If fully approved, schedule execution and notifications using BullMQ
     if (newApprovalCount >= recoveryRequest.requiredApprovals) {
-      const now = new Date();
-      if (now >= recoveryRequest.executableAfter) {
-        // Execute recovery asynchronously
-        setImmediate(() => executeRecoveryAutomatically(recoveryRequest));
+      try {
+        const now = new Date();
+        
+        if (now >= recoveryRequest.executableAfter) {
+          // Schedule immediate execution
+          const executionJob = await recoveryScheduler.scheduleSpecificRecovery(requestId, 1000); // 1 second delay
+          logger.info(`Recovery ${requestId} scheduled for immediate execution. Job ID: ${executionJob.id}`);
+        } else {
+          // Schedule execution after time-lock
+          const delay = recoveryRequest.executableAfter.getTime() - now.getTime();
+          const executionJob = await recoveryScheduler.scheduleSpecificRecovery(requestId, delay);
+          logger.info(`Recovery ${requestId} scheduled for execution at ${recoveryRequest.executableAfter}. Job ID: ${executionJob.id}`);
+        }
+
+        // Notify user that recovery is approved
+        await recoveryScheduler.scheduleRecoveryNotification(
+          requestId,
+          'approved',
+          'user',
+          {
+            approvalCount: newApprovalCount,
+            executableAfter: recoveryRequest.executableAfter,
+            adminEmail: adminEmail
+          },
+          2000 // 2 second delay
+        );
+
+        logger.info(`Recovery approval notifications scheduled for request ${requestId}`);
+
+      } catch (schedulingError) {
+        logger.error(`Failed to schedule execution/notifications for recovery ${requestId}:`, schedulingError);
+        // Don't fail the approval, just log the error
       }
     }
 
@@ -515,6 +548,21 @@ export const rejectRecoveryRequest = async (req: AuthRequest, res: Response) => 
       userAgent: req.get('User-Agent')
     });
 
+    // Schedule notification to user about rejection
+    try {
+      await recoveryScheduler.scheduleRecoveryNotification(
+        requestId,
+        'rejected',
+        'user',
+        {
+          reason: reason.trim(),
+          rejectedBy: req.user!.email
+        },
+        1000 // 1 second delay
+      );
+    } catch (notificationError) {
+      logger.error(`Failed to schedule rejection notification for recovery ${requestId}:`, notificationError);
+    }
     logger.info(`Recovery request ${requestId} rejected by admin ${req.user!.email}`);
 
     res.json({
@@ -710,6 +758,95 @@ export const retryFailedRecovery = async (req: AuthRequest, res: Response) => {
     logger.error('Retry recovery error:', error);
     res.status(500).json({ 
       error: 'Failed to retry recovery',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+};
+
+/**
+ * Force execute recovery (emergency admin function)
+ * POST /api/admin/recovery/:requestId/force-execute
+ */
+export const forceExecuteRecovery = async (req: AuthRequest, res: Response) => {
+  try {
+    const { requestId } = req.params;
+    const { reason } = req.body;
+    const adminId = req.user!.id;
+
+    // Verify super admin role for force execution
+    if (req.user!.role !== 'super_admin') {
+      return res.status(403).json({ error: 'Super admin access required for force execution' });
+    }
+
+    if (!reason || reason.trim().length < 10) {
+      return res.status(400).json({ error: 'Force execution reason is required (min 10 characters)' });
+    }
+
+    const recoveryRequest = await RecoveryRequest.findByPk(requestId);
+
+    if (!recoveryRequest) {
+      return res.status(404).json({ error: 'Recovery request not found' });
+    }
+
+    if (!['pending', 'approved', 'failed'].includes(recoveryRequest.status)) {
+      return res.status(400).json({ 
+        error: `Cannot force execute request with status: ${recoveryRequest.status}` 
+      });
+    }
+
+    // Check if expired
+    const now = new Date();
+    if (now > recoveryRequest.expiresAt) {
+      return res.status(400).json({ 
+        error: 'Cannot force execute expired recovery request' 
+      });
+    }
+
+    try {
+      // Schedule immediate execution with high priority
+      const forceJob = await recoveryScheduler.scheduleSpecificRecovery(requestId, 500); // 0.5 second delay
+
+      // Log force execution attempt
+      await RecoveryAuditLog.create({
+        recoveryRequestId: requestId,
+        actionType: 'retry_attempted',
+        performedBy: adminId,
+        performedAt: now,
+        details: {
+          jobId: forceJob.id,
+          forceExecution: true,
+          reason: reason.trim(),
+          bypassedTimelock: now < recoveryRequest.executableAfter,
+          bypassedApprovals: recoveryRequest.currentApprovals < recoveryRequest.requiredApprovals,
+          initiatedByAdmin: req.user!.email
+        },
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent')
+      });
+
+      logger.warn(`Force execution scheduled for recovery ${requestId} by super admin ${req.user!.email}. Reason: ${reason}`);
+
+      res.json({
+        message: 'Recovery force execution scheduled successfully',
+        jobId: forceJob.id,
+        recoveryRequestId: requestId,
+        scheduledAt: new Date().toISOString(),
+        reason: reason.trim(),
+        warning: 'This bypassed normal approval and time-lock requirements'
+      });
+
+    } catch (schedulingError) {
+      logger.error(`Failed to schedule force execution for recovery ${requestId}:`, schedulingError);
+      res.status(500).json({ 
+        error: 'Failed to schedule force execution',
+        details: schedulingError instanceof Error ? schedulingError.message : 'Unknown error'
+      });
+    }
+
+  } catch (error) {
+    logger.error('Force execute recovery error:', error);
+    res.status(500).json({ 
+      error: 'Failed to force execute recovery',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
   }

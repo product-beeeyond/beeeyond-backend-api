@@ -4,6 +4,11 @@ import {
   expireOldRecoveries, 
   cleanupOldAuditLogs 
 } from './jobs/recoveryJobs';
+import MultiSigWallet from '../models/MultiSigWallet';
+import MultiSigSigner from '../models/MultiSigSigner';
+import RecoveryRequest from '../models/RecoveryRequest';
+import RecoveryAuditLog from '../models/RecoveryAuditLog';
+import logger from '../utils/logger';
 
 // Run every 5 minutes to check for executable recoveries
 cron.schedule('*/5 * * * *', processExecutableRecoveries);
