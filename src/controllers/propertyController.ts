@@ -1,168 +1,302 @@
-
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable unused-imports/no-unused-imports */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { Request, Response } from 'express';
-import { Op } from 'sequelize';
-import Property from '../models/Property';
-import PropertyHolding from '../models/PropertyHolding';
+import { Response } from "express";
+import { AuthRequest } from "../middleware/auth";
+import Property from "../models/Property";
+import MultiSigWallet from "../models/MultiSigWallet";
+import { stellarService } from "../services/stellarService";
+import logger from "../utils/logger";
+import { sequelize } from "../config/database";
+import { Op, Transaction } from "sequelize";
+import { validate, propertySchema } from "../middleware/validation";
 import MultiSigTransaction from '../models/MultiSigTransaction';
-import MultiSigWallet from '../models/MultiSigWallet';
-import { AuthRequest } from '../middleware/auth';
-import logger from '../utils/logger';
-import { STELLAR_NETWORK } from '../config';
 
-export const GetAllProperties = async (req: Request, res: Response) => {
+// ===========================================
+// CREATE PROPERTY WITH FULL TOKENIZATION FLOW
+// ===========================================
+
+export const CreateProperty = async (req: AuthRequest, res: Response) => {
+  const dbTransaction = await sequelize.transaction();
+
+  try {
+    const {
+      title,
+      description,
+      location,
+      propertyType,
+      totalTokens,
+      tokenPrice,
+      totalValue,
+      expectedAnnualReturn,
+      minimumInvestment,
+      images,
+      amenities,
+      documents,
+      locationDetails,
+      rentalIncomeMonthly,
+      propertyManager,
+      featured,
+    } = req.body;
+
+    // Validate required fields
+    if (!title || !location || !propertyType || !totalTokens || !tokenPrice) {
+      await dbTransaction.rollback();
+      return res.status(400).json({
+        error:
+          "Missing required fields: title, location, propertyType, totalTokens, tokenPrice",
+      });
+    }
+
+    // Calculate total value if not provided
+    const calculatedTotalValue = totalValue || totalTokens * tokenPrice;
+
+    // Step 1: Create the property record
+    const property = await Property.create(
+      {
+        title,
+        description,
+        location,
+        propertyType,
+        totalTokens,
+        availableTokens: totalTokens, // Initially all tokens are available
+        tokenPrice,
+        totalValue: calculatedTotalValue,
+        expectedAnnualReturn,
+        minimumInvestment: minimumInvestment || 10000,
+        images: images || [],
+        amenities: amenities || [],
+        documents,
+        locationDetails,
+        rentalIncomeMonthly,
+        propertyManager,
+        status: "coming_soon", // Start as coming_soon until fully set up
+        featured: featured || false,
+      },
+      { transaction: dbTransaction }
+    );
+
+    logger.info(`Property created: ${property.id} - ${title}`);
+
+    // Step 2: Create property wallets (distribution & governance)
+    const walletResult = await stellarService.createPropertyWallets({
+      propertyId: property.id,
+      propertyTitle: property.title,
+      propertyManager: property.propertyManager,
+      createdBy: req.user!.id,
+    });
+
+    logger.info(
+      `Property wallets created for ${property.title}: Distribution ${walletResult.distributionWallet.publicKey}`
+    );
+
+    // Step 3: Fund distribution wallet with minimum XLM for operations
+    await stellarService.fundWalletFromTreasury(
+      walletResult.distributionWallet.publicKey,
+      "2" // 2 XLM for operations
+    );
+
+    // Step 4: Create and issue property tokens
+    const assetCode = `PROP${property.id.substring(0, 8).toUpperCase()}`;
+
+    await stellarService.createAndIssuePropertyToken({
+      propertyId: property.id,
+      totalSupply: totalTokens,
+      distributionWalletPublicKey: walletResult.distributionWallet.publicKey,
+    });
+
+    // Step 5: Update property with Stellar asset information
+    await property.update(
+      {
+        stellarAssetCode: assetCode,
+        stellarAssetIssuer: walletResult.distributionWallet.publicKey,
+        status: "active", // Now fully set up and ready for investment
+      },
+      { transaction: dbTransaction }
+    );
+
+    // Commit the transaction
+    await dbTransaction.commit();
+
+    logger.info(
+      `Property ${property.title} fully tokenized with ${totalTokens} ${assetCode} tokens`
+    );
+
+    // Return comprehensive response
+    res.status(201).json({
+      message: "Property created and tokenized successfully",
+      property: {
+        id: property.id,
+        title: property.title,
+        description: property.description,
+        location: property.location,
+        propertyType: property.propertyType,
+        totalTokens: property.totalTokens,
+        availableTokens: property.availableTokens,
+        tokenPrice: property.tokenPrice,
+        totalValue: property.totalValue,
+        expectedAnnualReturn: property.expectedAnnualReturn,
+        minimumInvestment: property.minimumInvestment,
+        status: property.status,
+        stellarAssetCode: property.stellarAssetCode,
+        stellarAssetIssuer: property.stellarAssetIssuer,
+        featured: property.featured,
+        createdAt: property.createdAt,
+      },
+      tokenization: {
+        assetCode: assetCode,
+        assetIssuer: walletResult.distributionWallet.publicKey,
+        totalSupply: totalTokens,
+        distributionWallet: walletResult.distributionWallet.publicKey,
+        tokensIssued: true,
+        walletFunded: true,
+      },
+      wallets: {
+        distribution: {
+          publicKey: walletResult.distributionWallet.publicKey,
+          purpose: "Holds property tokens for sale to investors",
+          funded: true,
+          balance: "2 XLM",
+        },
+        governance: walletResult.governanceWallet
+          ? {
+              publicKey: walletResult.governanceWallet.publicKey,
+              purpose: "Property governance and major decisions",
+              funded: true,
+            }
+          : null,
+      },
+    });
+  } catch (error) {
+    await dbTransaction.rollback();
+    logger.error("Create property error:", error);
+
+    // Handle specific error types
+    if (error instanceof Error) {
+      if (error.message.includes("Validation error")) {
+        return res.status(400).json({
+          error: "Property validation failed",
+          details: error.message,
+        });
+      }
+
+      if (error.message.includes("Stellar")) {
+        return res.status(500).json({
+          error: "Blockchain tokenization failed",
+          details: "Failed to create Stellar assets or wallets",
+        });
+      }
+    }
+
+    res.status(500).json({
+      error: "Failed to create property",
+      details: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+};
+
+// ===========================================
+// UPDATE PROPERTY (ADMIN ONLY)
+// ===========================================
+
+export const UpdateProperty = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+
+    const property = await Property.findByPk(id);
+    if (!property) {
+      return res.status(404).json({ error: "Property not found" });
+    }
+
+    // Prevent updating certain fields that affect tokenization
+    const restrictedFields = [
+      "totalTokens",
+      "stellarAssetCode",
+      "stellarAssetIssuer",
+    ];
+    const hasRestrictedUpdates = restrictedFields.some(
+      (field) => field in updates
+    );
+
+    if (hasRestrictedUpdates) {
+      return res.status(400).json({
+        error: "Cannot update tokenization-related fields",
+        restrictedFields,
+      });
+    }
+
+    // Update the property
+    await property.update(updates);
+
+    logger.info(`Property updated: ${property.id} - ${property.title}`);
+
+    res.json({
+      message: "Property updated successfully",
+      property: property.toJSON(),
+    });
+  } catch (error) {
+    logger.error("Update property error:", error);
+    res.status(500).json({
+      error: "Failed to update property",
+      details: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+};
+
+// ===========================================
+// GET ALL PROPERTIES (WITH FILTERING)
+// ===========================================
+
+export const GetAllProperties = async (req: AuthRequest, res: Response) => {
   try {
     const {
       page = 1,
       limit = 20,
       location,
       propertyType,
+      status = "active",
+      featured,
       minPrice,
       maxPrice,
-      minReturn,
-      status = 'active',
-      featured,
-      search
+      sortBy = "createdAt",
+      sortOrder = "DESC",
     } = req.query;
 
     const offset = (Number(page) - 1) * Number(limit);
+    const whereClause: any = {};
 
-    // Build where conditions
-    const whereConditions: any = {};
-
-    if (status) {
-      whereConditions.status = status;
-    }
-
-    if (location) {
-      whereConditions.location = {
-        [Op.iLike]: `%${location}%`
+    // Apply filters
+    if (location) whereClause.location = { [Op.iLike]: `%${location}%` };
+    if (propertyType) whereClause.propertyType = propertyType;
+    if (status) whereClause.status = status;
+    if (featured) whereClause.featured = featured === "true";
+    if (minPrice) whereClause.tokenPrice = { [Op.gte]: minPrice };
+    if (maxPrice) {
+      whereClause.tokenPrice = {
+        ...whereClause.tokenPrice,
+        [Op.lte]: maxPrice,
       };
-    }
-
-    if (propertyType) {
-      whereConditions.propertyType = propertyType;
-    }
-
-    if (minPrice || maxPrice) {
-      whereConditions.tokenPrice = {};
-      if (minPrice) whereConditions.tokenPrice[Op.gte] = Number(minPrice);
-      if (maxPrice) whereConditions.tokenPrice[Op.lte] = Number(maxPrice);
-    }
-
-    if (minReturn) {
-      whereConditions.expectedAnnualReturn = {
-        [Op.gte]: Number(minReturn)
-      };
-    }
-
-    if (featured === 'true') {
-      whereConditions.featured = true;
-    }
-
-    if (search) {
-      whereConditions[Op.or] = [
-        { title: { [Op.iLike]: `%${search}%` } },
-        { description: { [Op.iLike]: `%${search}%` } },
-        { location: { [Op.iLike]: `%${search}%` } }
-      ];
     }
 
     const { count, rows: properties } = await Property.findAndCountAll({
-      where: whereConditions,
+      where: whereClause,
+      limit: Number(limit),
+      offset,
+      order: [[sortBy as string, sortOrder as string]],
       include: [
         {
           model: MultiSigWallet,
-          as: 'multiSigWallets',
-          attributes: ['stellarPublicKey', 'walletType', 'status'],
+          as: "wallets",
+          where: { status: "active" },
           required: false,
-        }
+          attributes: ["stellarPublicKey", "walletType", "status"],
+        },
       ],
-      order: [
-        ['featured', 'DESC'],
-        ['createdAt', 'DESC']
-      ],
-      limit: Number(limit),
-      offset,
-      attributes: {
-        exclude: ['documents'] // Exclude heavy documents field from listing
-      }
     });
 
-    const propertiesWithMetrics = await Promise.all(
-      properties.map(async (property) => {
-        const [investorCount, transactionCount, totalInvested] = await Promise.all([
-          PropertyHolding.count({
-            where: {
-              propertyId: property.id,
-              tokensOwned: { [Op.gt]: 0 }
-            }
-          }),
-          // Count executed multisig transactions for this property
-          MultiSigTransaction.count({
-            where: {
-              '$wallet.propertyId$': property.id,
-              status: 'executed',
-              '$metadata.transactionType$': 'buy'
-            },
-            include: [
-              {
-                model: MultiSigWallet,
-                as: 'wallet',
-                attributes: [],
-                where: { propertyId: property.id }
-              }
-            ]
-          }),
-          // Sum total invested from completed buy transactions
-          MultiSigTransaction.sum('metadata.totalAmount', {
-            where: {
-              '$wallet.propertyId$': property.id,
-              status: 'executed',
-              '$metadata.transactionType$': 'buy'
-            },
-            include: [
-              {
-                model: MultiSigWallet,
-                as: 'wallet',
-                attributes: [],
-                where: { propertyId: property.id }
-              }
-            ]
-          }) as Promise<number>
-        ]);
-
-        const fundingProgress = ((property.totalTokens - property.availableTokens) / property.totalTokens) * 100;
-
-        // Get wallet information
-        const distributionWallet = property.multiSigWallets?.find(w => w.walletType === 'property_distribution');
-        const governanceWallet = property.multiSigWallets?.find(w => w.walletType === 'property_governance');
-
-        return {
-          ...property.toJSON(),
-          metrics: {
-            investorCount,
-            transactionCount,
-            fundingProgress: Math.round(fundingProgress),
-            tokensSold: property.totalTokens - property.availableTokens,
-            totalInvested: totalInvested || 0,
-          },
-          wallets: {
-            distribution: distributionWallet ? {
-              publicKey: distributionWallet.stellarPublicKey,
-              status: distributionWallet.status
-            } : null,
-            governance: governanceWallet ? {
-              publicKey: governanceWallet.stellarPublicKey,
-              status: governanceWallet.status
-            } : null
-          }
-        };
-      })
-    );
-
     res.json({
-      properties: propertiesWithMetrics,
+      properties,
       pagination: {
         total: count,
         page: Number(page),
@@ -170,461 +304,283 @@ export const GetAllProperties = async (req: Request, res: Response) => {
         limit: Number(limit),
       },
     });
-
   } catch (error) {
-    logger.error('Properties fetch error:', error);
-    res.status(500).json({ error: 'Failed to fetch properties' });
+    logger.error("Get properties error:", error);
+    res.status(500).json({
+      error: "Failed to fetch properties",
+      details: error instanceof Error ? error.message : "Unknown error",
+    });
   }
-}
+};
 
-export const GetSingleProperty = async (req: Request, res: Response) => {
+// ===========================================
+// GET SINGLE PROPERTY WITH DETAILS
+// ===========================================
+
+export const GetSingleProperty = async (req: AuthRequest, res: Response) => {
   try {
-    const property = await Property.findByPk(req.params.id, {
+    const { id } = req.params;
+
+    const property = await Property.findByPk(id, {
       include: [
         {
           model: MultiSigWallet,
-          as: 'multiSigWallets',
-          attributes: ['id', 'stellarPublicKey', 'walletType', 'status'],
+          as: "wallets",
+          where: { status: "active" },
           required: false,
-        }
-      ]
+          attributes: [
+            "stellarPublicKey",
+            "walletType",
+            "status",
+            "initialBalance",
+          ],
+        },
+      ],
     });
 
     if (!property) {
-      return res.status(404).json({ error: 'Property not found' });
+      return res.status(404).json({ error: "Property not found" });
     }
 
-    // Get additional metrics using multisig transactions
-    const [investorCount, recentTransactions, totalInvested] = await Promise.all([
-      PropertyHolding.count({
-        where: {
-          propertyId: property.id,
-          tokensOwned: { [Op.gt]: 0 }
+    // Get wallet balances if wallets exist
+    const walletsWithBalances = await Promise.all(
+      (property as any).wallets?.map(async (wallet: any) => {
+        try {
+          const balances = await stellarService.getAccountBalance(
+            wallet.stellarPublicKey
+          );
+          return {
+            ...wallet.toJSON(),
+            balances,
+          };
+        } catch (error) {
+          logger.warn(
+            `Failed to get balance for wallet ${wallet.stellarPublicKey}:`,
+            error
+          );
+          return wallet.toJSON();
         }
-      }),
-      // Get recent multisig transactions for this property
-      MultiSigTransaction.findAll({
-        where: {
-          status: 'executed'
-        },
-        include: [
-          {
-            model: MultiSigWallet,
-            as: 'wallet',
-            where: { propertyId: property.id },
-            attributes: ['walletType']
-          }
-        ],
-        order: [['executedAt', 'DESC']],
-        limit: 5,
-      }),
-      // Sum total invested from completed buy transactions
-      MultiSigTransaction.sum('metadata.totalAmount', {
-        where: {
-          status: 'executed',
-          '$metadata.transactionType$': 'buy'
-        },
-        include: [
-          {
-            model: MultiSigWallet,
-            as: 'wallet',
-            attributes: [],
-            where: { propertyId: property.id }
-          }
-        ]
-      }) as Promise<number>
-    ]);
-
-    const fundingProgress = ((property.totalTokens - property.availableTokens) / property.totalTokens) * 100;
-
-    // Process recent transactions to show activity
-    const processedTransactions = recentTransactions.map(tx => {
-      const metadata = tx.metadata as any;
-      return {
-        type: metadata?.transactionType || 'unknown',
-        quantity: metadata?.quantity || 0,
-        pricePerToken: metadata?.pricePerToken || 0,
-        executedAt: tx.executedAt,
-        stellarTxHash: tx.executionTxHash
-      };
-    });
-
-    // Get wallet information
-    const distributionWallet = property.multiSigWallets?.find(w => w.walletType === 'property_distribution');
-    const governanceWallet = property.multiSigWallets?.find(w => w.walletType === 'property_governance');
+      }) || []
+    );
 
     res.json({
-      ...property.toJSON(),
-      metrics: {
-        investorCount,
-        fundingProgress: Math.round(fundingProgress),
-        tokensSold: property.totalTokens - property.availableTokens,
-        totalInvested: totalInvested || 0,
-        recentTransactions: processedTransactions,
+      property: {
+        ...property.toJSON(),
+        wallets: walletsWithBalances,
       },
-      wallets: {
-        distribution: distributionWallet ? {
-          id: distributionWallet.id,
-          publicKey: distributionWallet.stellarPublicKey,
-          status: distributionWallet.status
-        } : null,
-        governance: governanceWallet ? {
-          id: governanceWallet.id,
-          publicKey: governanceWallet.stellarPublicKey,
-          status: governanceWallet.status
-        } : null
+    });
+  } catch (error) {
+    logger.error("Get single property error:", error);
+    res.status(500).json({
+      error: "Failed to fetch property",
+      details: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+};
+
+// ===========================================
+// DEACTIVATE PROPERTY (ADMIN ONLY)
+// ===========================================
+
+export const DeactivateProperty = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body;
+
+    const property = await Property.findByPk(id);
+    if (!property) {
+      return res.status(404).json({ error: "Property not found" });
+    }
+
+    await property.update({
+      status: "inactive",
+      // Store deactivation reason in documents field
+      documents: {
+        ...property.documents,
+        deactivation: {
+          reason,
+          deactivatedAt: new Date(),
+          deactivatedBy: req.user!.id,
+        },
       },
-      blockchain: {
-        assetCode: property.stellarAssetCode,
-        assetIssuer: property.stellarAssetIssuer,
-        networkType: STELLAR_NETWORK
-      }
     });
 
+    logger.info(`Property deactivated: ${property.id} - ${property.title}`);
+
+    res.json({
+      message: "Property deactivated successfully",
+      property: {
+        id: property.id,
+        title: property.title,
+        status: property.status,
+      },
+    });
   } catch (error) {
-    logger.error('Property fetch error:', error);
-    res.status(500).json({ error: 'Failed to fetch property details' });
+    logger.error("Deactivate property error:", error);
+    res.status(500).json({
+      error: "Failed to deactivate property",
+      details: error instanceof Error ? error.message : "Unknown error",
+    });
   }
-}
+};
+
+// ===========================================
+// GET PROPERTY ANALYTICS
+// ===========================================
 
 export const GetPropertyAnalytics = async (req: AuthRequest, res: Response) => {
   try {
-    const propertyId = req.params.id;
-    const { period = '30d' } = req.query;
+    const { id } = req.params;
+    const { period = "30d" } = req.query;
+
+    const property = await Property.findByPk(id);
+    if (!property) {
+      return res.status(404).json({ error: "Property not found" });
+    }
 
     // Calculate date range based on period
-    const startDate = new Date();
-    switch (period) {
-      case '7d':
-        startDate.setDate(startDate.getDate() - 7);
-        break;
-      case '30d':
-        startDate.setDate(startDate.getDate() - 30);
-        break;
-      case '90d':
-        startDate.setDate(startDate.getDate() - 90);
-        break;
-      case '1y':
-        startDate.setFullYear(startDate.getFullYear() - 1);
-        break;
-      default:
-        startDate.setDate(startDate.getDate() - 30);
-    }
+    const now = new Date();
+    const periodMap = {
+      "7d": 7,
+      "30d": 30,
+      "90d": 90,
+      "1y": 365,
+    };
+    const days = periodMap[period as keyof typeof periodMap] || 30;
+    const startDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
 
-    // Get multisig transactions for the property in the period
+    // Get investment transactions for analytics
     const transactions = await MultiSigTransaction.findAll({
       where: {
-        status: 'executed',
-        executedAt: { [Op.gte]: startDate }
-      },
-      include: [
-        {
-          model: MultiSigWallet,
-          as: 'wallet',
-          where: { propertyId },
-          attributes: ['walletType']
-        }
-      ],
-      order: [['executedAt', 'ASC']]
-    });
-
-    // Calculate price history and volume from multisig transactions
-    const priceHistory: any[] = [];
-    const volumeHistory: any[] = [];
-    let currentPrice = 0;
-
-    transactions.forEach((tx) => {
-      const metadata = tx.metadata as any;
-      if (!metadata || !tx.executedAt) return;
-
-      const date = tx.executedAt.toISOString().split('T')[0];
-      const transactionType = metadata.transactionType;
-      const quantity = metadata.quantity || 0;
-      const pricePerToken = metadata.pricePerToken || 0;
-      const totalAmount = metadata.totalAmount || 0;
-
-      if (pricePerToken > 0) {
-        currentPrice = pricePerToken;
-
-        // Update price history
-        const existingPricePoint = priceHistory.find(p => p.date === date);
-        if (existingPricePoint) {
-          existingPricePoint.price = pricePerToken;
-        } else {
-          priceHistory.push({ date, price: pricePerToken });
-        }
-      }
-
-      // Update volume history
-      const existingVolumePoint = volumeHistory.find(v => v.date === date);
-      if (existingVolumePoint) {
-        if (transactionType === 'buy') {
-          existingVolumePoint.buyVolume += quantity;
-          existingVolumePoint.buyValue += totalAmount;
-        } else if (transactionType === 'sell') {
-          existingVolumePoint.sellVolume += quantity;
-          existingVolumePoint.sellValue += totalAmount;
-        }
-        existingVolumePoint.totalVolume = existingVolumePoint.buyVolume + existingVolumePoint.sellVolume;
-      } else {
-        volumeHistory.push({
-          date,
-          buyVolume: transactionType === 'buy' ? quantity : 0,
-          sellVolume: transactionType === 'sell' ? quantity : 0,
-          totalVolume: quantity,
-          buyValue: transactionType === 'buy' ? totalAmount : 0,
-          sellValue: transactionType === 'sell' ? totalAmount : 0,
-        });
-      }
-    });
-
-    // Calculate summary metrics
-    const buyTransactions = transactions.filter(tx => {
-      const metadata = tx.metadata as any;
-      return metadata?.transactionType === 'buy';
-    });
-    
-    const sellTransactions = transactions.filter(tx => {
-      const metadata = tx.metadata as any;
-      return metadata?.transactionType === 'sell';
-    });
-
-    const totalBuyVolume = buyTransactions.reduce((sum, tx) => {
-      const metadata = tx.metadata as any;
-      return sum + (metadata?.quantity || 0);
-    }, 0);
-
-    const totalSellVolume = sellTransactions.reduce((sum, tx) => {
-      const metadata = tx.metadata as any;
-      return sum + (metadata?.quantity || 0);
-    }, 0);
-
-    const averageBuyPrice = buyTransactions.length > 0
-      ? buyTransactions.reduce((sum, tx) => {
-          const metadata = tx.metadata as any;
-          return sum + (metadata?.pricePerToken || 0);
-        }, 0) / buyTransactions.length
-      : 0;
-
-    const averageSellPrice = sellTransactions.length > 0
-      ? sellTransactions.reduce((sum, tx) => {
-          const metadata = tx.metadata as any;
-          return sum + (metadata?.pricePerToken || 0);
-        }, 0) / sellTransactions.length
-      : 0;
-
-    // Get wallet balances if available
-    const distributionWallet = await MultiSigWallet.findOne({
-      where: { propertyId, walletType: 'property_distribution', status: 'active' }
-    });
-
-    let walletBalance = null;
-    if (distributionWallet) {
-      try {
-        const { stellarService } = await import('../services/stellarService');
-        const balances = await stellarService.getAccountBalance(distributionWallet.stellarPublicKey);
-        walletBalance = balances;
-      } catch (error) {
-        logger.warn('Failed to fetch wallet balance:', error);
-      }
-    }
-
-    res.json({
-      priceHistory,
-      volumeHistory,
-      summary: {
-        currentPrice,
-        averageBuyPrice,
-        averageSellPrice,
-        totalBuyVolume,
-        totalSellVolume,
-        netVolume: totalBuyVolume - totalSellVolume,
-        priceChange: averageBuyPrice > 0 ? ((currentPrice - averageBuyPrice) / averageBuyPrice) * 100 : 0,
-        transactionCount: transactions.length,
-        period,
-      },
-      walletInfo: distributionWallet ? {
-        publicKey: distributionWallet.stellarPublicKey,
-        balances: walletBalance,
-      } : null
-    });
-
-  } catch (error) {
-    logger.error('Property analytics error:', error);
-    res.status(500).json({ error: 'Failed to fetch property analytics' });
-  }
-}
-
-// New function to get property transaction history
-export const GetPropertyTransactions = async (req: AuthRequest, res: Response) => {
-  try {
-    const propertyId = req.params.id;
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 20;
-    const offset = (page - 1) * limit;
-
-    // Get property wallets
-    const propertyWallets = await MultiSigWallet.findAll({
-      where: { propertyId, status: 'active' },
-      attributes: ['id']
-    });
-
-    if (propertyWallets.length === 0) {
-      return res.json({
-        transactions: [],
-        pagination: {
-          total: 0,
-          page,
-          pages: 0,
-          limit,
+        "metadata.propertyId": property.id,
+        createdAt: {
+          [Op.gte]: startDate,
         },
-      });
-    }
-
-    const walletIds = propertyWallets.map(w => w.id);
-
-    // Get multisig transactions for the property
-    const { count, rows: transactions } = await MultiSigTransaction.findAndCountAll({
-      where: {
-        multiSigWalletId: { [Op.in]: walletIds },
-        status: { [Op.in]: ['executed', 'failed'] }
+        status: "executed",
       },
-      include: [
-        {
-          model: MultiSigWallet,
-          as: 'wallet',
-          attributes: ['stellarPublicKey', 'walletType'],
-        }
-      ],
-      order: [['executedAt', 'DESC'], ['createdAt', 'DESC']],
-      limit,
-      offset,
+      order: [["createdAt", "ASC"]],
     });
 
-    // Process transactions to extract relevant information
-    const processedTransactions = transactions.map(tx => {
+    // Calculate analytics
+    const totalInvestmentVolume = transactions.reduce((sum, tx) => {
       const metadata = tx.metadata as any;
-      return {
-        id: tx.id,
-        type: metadata?.transactionType || 'unknown',
-        description: tx.description,
-        category: tx.category,
-        status: tx.status,
-        stellarTxHash: tx.executionTxHash,
-        quantity: metadata?.quantity || 0,
-        pricePerToken: metadata?.pricePerToken || 0,
-        totalAmount: metadata?.totalAmount || 0,
-        platformFee: metadata?.platformFee || 0,
-        netAmount: metadata?.netAmount || 0,
-        executedAt: tx.executedAt,
-        createdAt: tx.createdAt,
-        wallet: tx.wallet,
-        failureReason: tx.failureReason,
-      };
-    });
+      return sum + (metadata?.totalAmount || 0);
+    }, 0);
 
-    res.json({
-      transactions: processedTransactions,
-      pagination: {
-        total: count,
-        page,
-        pages: Math.ceil(count / limit),
-        limit,
-      },
-    });
+    const totalTokensSold = transactions.reduce((sum, tx) => {
+      const metadata = tx.metadata as any;
+      return sum + (metadata?.quantity || 0);
+    }, 0);
 
-  } catch (error) {
-    logger.error('Property transactions fetch error:', error);
-    res.status(500).json({ error: 'Failed to fetch property transactions' });
-  }
-}
-
-// New function to get property wallet status
-export const GetPropertyWalletStatus = async (req: AuthRequest, res: Response) => {
-  try {
-    const propertyId = req.params.id;
-
-    // Verify property exists
-    const property = await Property.findByPk(propertyId);
-    if (!property) {
-      return res.status(404).json({ error: 'Property not found' });
-    }
-
-    // Get all wallets for the property
-    const wallets = await MultiSigWallet.findAll({
-      where: { propertyId, status: 'active' },
-      include: [
-        {
-          model: MultiSigSigner,
-          as: 'signers',
-          attributes: ['publicKey', 'weight', 'role', 'status']
-        }
-      ]
-    });
-
-    // Get wallet balances
-    const walletsWithBalances = await Promise.all(
-      wallets.map(async (wallet) => {
-        try {
-          const { stellarService } = await import('../services/stellarService');
-          const balances = await stellarService.getAccountBalance(wallet.stellarPublicKey);
-          return {
-            ...wallet.toJSON(),
-            balances
-          };
-        } catch (error) {
-          logger.warn(`Failed to get balance for wallet ${wallet.stellarPublicKey}:`, error);
-          return {
-            ...wallet.toJSON(),
-            balances: [],
-            balanceError: 'Failed to load balance'
-          };
-        }
-      })
-    );
-
-    // Get recent transactions for these wallets
-    const recentTransactions = await MultiSigTransaction.findAll({
-      where: {
-        multiSigWalletId: { [Op.in]: wallets.map(w => w.id) },
-        status: { [Op.in]: ['executed', 'pending', 'failed'] }
-      },
-      order: [['createdAt', 'DESC']],
-      limit: 10,
-      attributes: ['id', 'description', 'category', 'status', 'executedAt', 'createdAt', 'metadata']
-    });
+    const averageInvestmentSize =
+      transactions.length > 0 ? totalInvestmentVolume / transactions.length : 0;
 
     res.json({
       property: {
         id: property.id,
         title: property.title,
-        stellarAssetCode: property.stellarAssetCode,
-        stellarAssetIssuer: property.stellarAssetIssuer,
+        totalTokens: property.totalTokens,
+        availableTokens: property.availableTokens,
+        tokenPrice: property.tokenPrice,
       },
-      wallets: walletsWithBalances,
-      recentActivity: recentTransactions.map(tx => {
-        const metadata = tx.metadata as any;
-        return {
-          id: tx.id,
-          description: tx.description,
-          category: tx.category,
-          status: tx.status,
-          type: metadata?.transactionType,
-          amount: metadata?.totalAmount,
-          executedAt: tx.executedAt,
-          createdAt: tx.createdAt,
-        };
-      }),
-      summary: {
-        totalWallets: wallets.length,
-        activeWallets: wallets.filter(w => w.status === 'active').length,
-        hasDistributionWallet: wallets.some(w => w.walletType === 'property_distribution'),
-        hasGovernanceWallet: wallets.some(w => w.walletType === 'property_governance'),
-      }
+      analytics: {
+        period,
+        totalInvestmentVolume,
+        totalTokensSold,
+        availableTokens: property.availableTokens,
+        occupancyRate: ((totalTokensSold / property.totalTokens) * 100).toFixed(
+          2
+        ),
+        averageInvestmentSize: averageInvestmentSize.toFixed(2),
+        totalTransactions: transactions.length,
+        priceHistory: [], // Could be enhanced with price tracking
+      },
+      transactions: transactions.slice(-10), // Last 10 transactions
+    });
+  } catch (error) {
+    logger.error("Property analytics error:", error);
+    res.status(500).json({
+      error: "Failed to fetch property analytics",
+      details: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+};
+
+// ===========================================
+// CREATE PROPERTY WALLETS (STANDALONE - FOR EXISTING PROPERTIES)
+// ===========================================
+
+export const CreatePropertyWallets = async (
+  req: AuthRequest,
+  res: Response
+) => {
+  try {
+    const { id } = req.params;
+
+    const property = await Property.findByPk(id);
+    if (!property) {
+      return res.status(404).json({ error: "Property not found" });
+    }
+
+    // Check if property wallets already exist
+    const existingWallet = await MultiSigWallet.findOne({
+      where: { propertyId: property.id, walletType: "property_distribution" },
     });
 
+    if (existingWallet) {
+      return res.status(400).json({
+        error: "Property wallets already exist",
+        distributionWallet: existingWallet.stellarPublicKey,
+      });
+    }
+
+    // Create property wallets
+    const walletResult = await stellarService.createPropertyWallets({
+      propertyId: property.id,
+      propertyTitle: property.title,
+      propertyManager: property.propertyManager,
+      createdBy: req.user!.id,
+    });
+
+    // Fund distribution wallet
+    await stellarService.fundWalletFromTreasury(
+      walletResult.distributionWallet.publicKey,
+      "2"
+    );
+
+    // Update property with wallet information
+    await property.update({
+      stellarAssetCode: `PROP${property.id.substring(0, 8).toUpperCase()}`,
+      stellarAssetIssuer: walletResult.distributionWallet.publicKey,
+    });
+
+    logger.info(`Standalone property wallets created for ${property.title}`);
+
+    res.status(201).json({
+      message: "Property wallets created successfully",
+      property: {
+        id: property.id,
+        title: property.title,
+      },
+      wallets: {
+        distribution: {
+          publicKey: walletResult.distributionWallet.publicKey,
+          purpose: "Holds property tokens for sale to investors",
+          funded: true,
+        },
+        governance: walletResult.governanceWallet
+          ? {
+              publicKey: walletResult.governanceWallet.publicKey,
+              purpose: "Property governance and major decisions",
+            }
+          : null,
+      },
+    });
   } catch (error) {
-    logger.error('Property wallet status error:', error);
-    res.status(500).json({ error: 'Failed to fetch property wallet status' });
+    logger.error("Create property wallets error:", error);
+    res.status(500).json({
+      error: "Failed to create property wallets",
+      details: error instanceof Error ? error.message : "Unknown error",
+    });
   }
-}
+};
