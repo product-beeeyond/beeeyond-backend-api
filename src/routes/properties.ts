@@ -6,7 +6,7 @@ import {
   requireKYC,
   requireSuperAdmin,
 } from "../middleware/auth";
-import { validate, propertySchema } from "../middleware/validation";
+import { validate, propertySchema, validatePropertyCreation, validatePropertyUpdate } from "../middleware/validation";
 import {
   // New comprehensive methods
   CreateProperty,
@@ -65,91 +65,91 @@ const validateCreateProperty = [
   },
 ];
 
-const validateUpdateProperty = (req: any, res: any, next: any) => {
-  const updates = req.body;
-  const allowedUpdates = [
-    "title",
-    "description",
-    "location",
-    "expectedAnnualReturn",
-    "minimumInvestment",
-    "images",
-    "amenities",
-    "documents",
-    "locationDetails",
-    "rentalIncomeMonthly",
-    "propertyManager",
-    "status",
-    "featured",
-  ];
+// const validateUpdateProperty = (req: any, res: any, next: any) => {
+//   const updates = req.body;
+//   const allowedUpdates = [
+//     "title",
+//     "description",
+//     "location",
+//     "expectedAnnualReturn",
+//     "minimumInvestment",
+//     "images",
+//     "amenities",
+//     "documents",
+//     "locationDetails",
+//     "rentalIncomeMonthly",
+//     "propertyManager",
+//     "status",
+//     "featured",
+//   ];
 
-  const isValidUpdate = Object.keys(updates).every((key) =>
-    allowedUpdates.includes(key)
-  );
+//   const isValidUpdate = Object.keys(updates).every((key) =>
+//     allowedUpdates.includes(key)
+//   );
 
-  if (!isValidUpdate) {
-    return res.status(400).json({
-      error: "Invalid update fields",
-      allowedFields: allowedUpdates,
-    });
-  }
+//   if (!isValidUpdate) {
+//     return res.status(400).json({
+//       error: "Invalid update fields",
+//       allowedFields: allowedUpdates,
+//     });
+//   }
 
-  next();
-};
+//   next();
+// };
 
-const validateAnalyticsParams = (req: any, res: any, next: any) => {
-  const { period } = req.query;
-  const validPeriods = ["7d", "30d", "90d", "1y"];
+// const validateAnalyticsParams = (req: any, res: any, next: any) => {
+//   const { period } = req.query;
+//   const validPeriods = ["7d", "30d", "90d", "1y"];
 
-  if (period && !validPeriods.includes(period)) {
-    return res.status(400).json({
-      error: `Invalid period. Must be one of: ${validPeriods.join(", ")}`,
-    });
-  }
+//   if (period && !validPeriods.includes(period)) {
+//     return res.status(400).json({
+//       error: `Invalid period. Must be one of: ${validPeriods.join(", ")}`,
+//     });
+//   }
 
-  next();
-};
+//   next();
+// };
 
-const validatePaginationParams = (req: any, res: any, next: any) => {
-  const { page, limit } = req.query;
+// const validatePaginationParams = (req: any, res: any, next: any) => {
+//   const { page, limit } = req.query;
 
-  if (page && (isNaN(Number(page)) || Number(page) < 1)) {
-    return res.status(400).json({ error: "Page must be a positive number" });
-  }
+//   if (page && (isNaN(Number(page)) || Number(page) < 1)) {
+//     return res.status(400).json({ error: "Page must be a positive number" });
+//   }
 
-  if (
-    limit &&
-    (isNaN(Number(limit)) || Number(limit) < 1 || Number(limit) > 100)
-  ) {
-    return res.status(400).json({ error: "Limit must be between 1 and 100" });
-  }
+//   if (
+//     limit &&
+//     (isNaN(Number(limit)) || Number(limit) < 1 || Number(limit) > 100)
+//   ) {
+//     return res.status(400).json({ error: "Limit must be between 1 and 100" });
+//   }
 
-  next();
-};
+//   next();
+// };
 
-const validateSearchParams = (req: any, res: any, next: any) => {
-  const { sortBy } = req.body;
-  const validSortFields = [
-    "createdAt",
-    "updatedAt",
-    "title",
-    "location",
-    "tokenPrice",
-    "totalValue",
-    "expectedAnnualReturn",
-    "totalTokens",
-    "availableTokens",
-  ];
+// const validateSearchParams = (req: any, res: any, next: any) => {
+//   const { sortBy } = req.body;
+//   const validSortFields = [
+//     "createdAt",
+//     "updatedAt",
+//     "title",
+//     "location",
+//     "tokenPrice",
+//     "totalValue",
+//     "expectedAnnualReturn",
+//     "totalTokens",
+//     "availableTokens",
+//   ];
 
-  if (sortBy && !validSortFields.includes(sortBy)) {
-    return res.status(400).json({
-      error: "Invalid sort field",
-      validFields: validSortFields,
-    });
-  }
+//   if (sortBy && !validSortFields.includes(sortBy)) {
+//     return res.status(400).json({
+//       error: "Invalid sort field",
+//       validFields: validSortFields,
+//     });
+//   }
 
-  next();
-};
+//   next();
+// };
 
 // ===========================================
 // PUBLIC PROPERTY ROUTES
@@ -369,7 +369,7 @@ router.post(
   "/",
   authenticate,
   requireAdmin,
-  validateCreateProperty,
+  validatePropertyCreation,
   CreateProperty
 );
 
@@ -382,7 +382,7 @@ router.put(
   authenticate,
   requireAdmin,
   validatePropertyId,
-  validateUpdateProperty,
+  validatePropertyUpdate,
   UpdateProperty
 );
 
