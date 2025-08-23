@@ -359,17 +359,17 @@ router.post("/user/wallet", authenticate, requireKYC, createUserMultisigWallet);
  */
 router.get("/user/wallets", authenticate, listUserWallets);
 
-/**
+/** ---DEPRECATED----
  * Recover user wallet (Admin only)
  * POST /api/multisig/user/:userId/recover
  */
-router.post(
-  "/user/:userId/recover",
-  authenticate,
-  requireAdmin,
-  validateWalletRecovery,
-  recoverUserWallet
-);
+// router.post(
+//   "/user/:userId/recover",
+//   authenticate,
+//   requireAdmin,
+//   validateWalletRecovery,
+//   recoverUserWallet
+// );
 
 // ===========================================
 // PLATFORM WALLET ROUTES

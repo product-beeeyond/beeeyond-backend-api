@@ -472,9 +472,9 @@ export const BuyPropertyToken = async (req: AuthRequest, res: Response) => {
 
     // Check wallet balance (would need to implement balance checking via Stellar)
     const walletBalances = await stellarService.getAccountBalance(userWallet.stellarPublicKey);
-    const ngnBalance = walletBalances.find(b => b.asset_code === 'NGN');
+    const bngnBalance = walletBalances.find(b => b.asset_code === 'bNGN');
     
-    if (!ngnBalance || parseFloat(ngnBalance.balance) < netAmount) {
+    if (!bngnBalance || parseFloat(bngnBalance.balance) < netAmount) {
       await dbTransaction.rollback();
       return res.status(400).json({ error: 'Insufficient wallet balance' });
     }
