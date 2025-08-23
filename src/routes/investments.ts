@@ -1,3 +1,6 @@
+/* eslint-disable unused-imports/no-unused-imports */
+/* eslint-disable unused-imports/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Router } from 'express';
 import { authenticate, requireKYC } from '../middleware/auth';

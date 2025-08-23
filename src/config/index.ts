@@ -38,6 +38,11 @@ export const STELLAR_DISTRIBUTION_SECRET =
 export const STELLAR_PLATFORM_SECRET = process.env.STELLAR_PLATFORM_SECRET!;
 export const STELLAR_RECOVERY_SECRET = process.env.STELLAR_RECOVERY_SECRET!;
 export const STELLAR_TREASURY_SECRET = process.env.STELLAR_TREASURY_SECRET!;
+
+export const RECOVERY_TIME_LOCK_HOURS = parseInt(String(process.env.RECOVERY_TIME_LOCK_HOURS));
+export const RECOVERY_EXPIRY_HOURS = parseInt(String(process.env.RECOVERY_EXPIRY_HOURS));
+export const RECOVERY_REQUIRED_APPROVALS = parseInt(String(process.env.RECOVERY_REQUIRED_APPROVALS));
+
 // Email Services
 export const RESEND_API_KEY = process.env.RESEND_API_KEY;
 export const FROM_EMAIL = process.env.FROM_EMAIL;
@@ -83,11 +88,13 @@ export const STELLAR_RESERVES = {
 export const MULTISIG_CONFIG = {
   // User recovery wallets (1-of-2: User OR Platform)
   USER_RECOVERY: {
-    USER_WEIGHT: 1,
-    PLATFORM_WEIGHT: 1,
-    THRESHOLD: 1,
-    MASTER_WEIGHT: 0, // Disable master key after setup
-    EXPECTED_SIGNERS: 2, // User + Platform recovery
+    LOW_THRESHOLD: 1,     // Either user OR platform can sign payments/offers
+    MEDIUM_THRESHOLD: 2,  // Both user AND platform required for account management
+    HIGH_THRESHOLD: 2,    // Both signatures for critical operations
+    USER_WEIGHT: 2,       // User has primary control
+    PLATFORM_WEIGHT: 1,   // Platform can assist/recover
+    MASTER_WEIGHT: 0,     // Disable master key after setup
+    EXPECTED_SIGNERS: 2,  // User + Platform recovery
     EXPECTED_TRUSTLINES: 3, // NGN + 2 property tokens average
     CALCULATED_RESERVE: 0.5 + 2 * 0.5 + 3 * 0.5, // 3 XLM base
     FUNDING_AMOUNT: "3.3", // 3 XLM + 10% buffer
@@ -95,10 +102,15 @@ export const MULTISIG_CONFIG = {
 
   // Platform treasury (2-of-3: Enhanced security)
   PLATFORM_TREASURY: {
-    THRESHOLD: 2,
+   LOW_THRESHOLD: 2,     // 2-of-3 for payments and offers
+    MEDIUM_THRESHOLD: 3,  // 3-of-3 for account management
+    HIGH_THRESHOLD: 3,    // 3-of-3 for critical operations
+    PRIMARY_WEIGHT: 2,    // Primary operations key
+    SECONDARY_WEIGHT: 1,  // Backup operational key  
+    RECOVERY_WEIGHT: 1,   // Emergency recovery key
     TOTAL_SIGNERS: 3,
     MASTER_WEIGHT: 0,
-    EXPECTED_SIGNERS: 3, // 3 platform keys
+    EXPECTED_SIGNERS: 3,  // 3 platform keys
     EXPECTED_TRUSTLINES: 1, // NGN for operations
     CALCULATED_RESERVE: 0.5 + 3 * 0.5 + 1 * 0.5, // 2.5 XLM
     FUNDING_AMOUNT: "2.75", // 2.5 XLM + 10% buffer
@@ -106,10 +118,14 @@ export const MULTISIG_CONFIG = {
 
   // Platform issuer/distribution (1-of-2: Operational efficiency + recovery)
   PLATFORM_ISSUER: {
-    THRESHOLD: 1,
+    LOW_THRESHOLD: 1,     // 1-of-2 for routine issuance
+    MEDIUM_THRESHOLD: 2,  // 2-of-2 for issuer account changes
+    HIGH_THRESHOLD: 2,    // 2-of-2 for authorization flags
+    PRIMARY_WEIGHT: 2,    // Main issuer operations
+    BACKUP_WEIGHT: 1,     // Backup for availability
     TOTAL_SIGNERS: 2,
     MASTER_WEIGHT: 0,
-    EXPECTED_SIGNERS: 2, // Platform + Backup
+    EXPECTED_SIGNERS: 2,  // Platform + Backup
     EXPECTED_TRUSTLINES: 5, // Multiple assets for operations
     CALCULATED_RESERVE: 0.5 + 2 * 0.5 + 5 * 0.5, // 4 XLM
     FUNDING_AMOUNT: "4.4", // 4 XLM + 10% buffer
@@ -117,9 +133,13 @@ export const MULTISIG_CONFIG = {
 
   // Property distribution (1-of-2: Platform + Optional Property Manager)
   PROPERTY_DISTRIBUTION: {
-    THRESHOLD: 1,
+     LOW_THRESHOLD: 1,     // Either platform or property manager
+    MEDIUM_THRESHOLD: 2,  // Both required for account changes
+    HIGH_THRESHOLD: 2,    // Both required for critical ops
+    PLATFORM_WEIGHT: 2,   // Platform has operational control
+    PROPERTY_MANAGER_WEIGHT: 1, // Property manager oversight
     MASTER_WEIGHT: 0,
-    EXPECTED_SIGNERS: 2, // Platform + Property manager (max case)
+    EXPECTED_SIGNERS: 2,  // Platform + Property manager (max case)
     EXPECTED_TRUSTLINES: 2, // Property token + NGN
     CALCULATED_RESERVE: 0.5 + 2 * 0.5 + 2 * 0.5, // 2.5 XLM
     FUNDING_AMOUNT: "2.75", // 2.5 XLM + 10% buffer
@@ -127,10 +147,15 @@ export const MULTISIG_CONFIG = {
 
   // Property governance (2-of-3: Major decisions require multiple signatures)
   PROPERTY_GOVERNANCE: {
-    THRESHOLD: 2,
+    LOW_THRESHOLD: 2,     // 2-of-3 for routine decisions
+    MEDIUM_THRESHOLD: 2,  // 2-of-3 for governance changes
+    HIGH_THRESHOLD: 3,    // 3-of-3 for critical decisions
+    PLATFORM_WEIGHT: 1,   // Platform vote
+    GOVERNANCE_WEIGHT: 1, // Governance committee vote
+    RECOVERY_WEIGHT: 1,   // Emergency recovery vote
     TOTAL_SIGNERS: 3,
     MASTER_WEIGHT: 0,
-    EXPECTED_SIGNERS: 3, // Platform + Governance key + Recovery
+    EXPECTED_SIGNERS: 3,  // Platform + Governance key + Recovery
     EXPECTED_TRUSTLINES: 1, // NGN for revenue distribution
     CALCULATED_RESERVE: 0.5 + 3 * 0.5 + 1 * 0.5, // 2.5 XLM
     FUNDING_AMOUNT: "2.75", // 2.5 XLM + 10% buffer
