@@ -29,6 +29,7 @@ cron.schedule('0 2 * * *', () => cleanupOldAuditLogs(365));walletId || !reason) 
       });
     }
 
+    
     // Check if user owns the wallet
     const wallet = await MultiSigWallet.findOne({
       where: { 
