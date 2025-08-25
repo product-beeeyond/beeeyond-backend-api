@@ -669,10 +669,10 @@ async (request: Request, response: Response) => {
 
 /**
  * Get property investment summary
- * GET /api/properties/:id/summary
+ * GET /api/v1/properties/summary?id
  */
 router.get(
-  "/:id/summary",
+  "/summary?id",
   authenticate,
   validatePropertyId,
   async (req, res) => {
