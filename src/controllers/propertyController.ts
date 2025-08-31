@@ -9,7 +9,7 @@ import { stellarService } from "../services/stellarService";
 import logger from "../utils/logger";
 import { sequelize } from "../config/database";
 import { Op, Transaction } from "sequelize";
-import { validate, propertySchema } from "../middleware/validation";
+// import { validate, propertySchema } from "../middleware/validation";
 import MultiSigTransaction from '../models/MultiSigTransaction';
 
 // ===========================================

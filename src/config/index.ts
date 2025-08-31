@@ -16,8 +16,7 @@ export const DATABASE_URL = process.env.DATABASE_URL;
 export const JWT_SECRET = process.env.JWT_SECRET as string;
 export const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN as string;
 export const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET as string;
-export const JWT_REFRESH_EXPIRES_IN = process.env
-  .JWT_REFRESH_EXPIRES_IN as string;
+export const JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRES_IN as string;
 
 // Redis Configuration
 export const REDIS_HOST = process.env.REDIS_HOST;
@@ -27,14 +26,9 @@ export const REDIS_URL = process.env.REDIS_URL;
 
 // Stellar Configuration
 export const STELLAR_NETWORK = process.env.STELLAR_NETWORK;
-export const STELLAR_HORIZON_URL =
-  process.env.STELLAR_HORIZON_URL ||
-  (STELLAR_NETWORK === "mainnet"
-    ? "https://horizon.stellar.org"
-    : "https://horizon-testnet.stellar.org");
+export const STELLAR_HORIZON_URL = STELLAR_NETWORK === "mainnet" ? process.env.STELLAR_HORIZON_URL : process.env.STELLAR_HORIZON_URL_TESTNET
 export const STELLAR_ISSUER_SECRET = process.env.STELLAR_ISSUER_SECRET;
-export const STELLAR_DISTRIBUTION_SECRET =
-  process.env.STELLAR_DISTRIBUTION_SECRET;
+export const STELLAR_DISTRIBUTION_SECRET = process.env.STELLAR_DISTRIBUTION_SECRET;
 export const STELLAR_PLATFORM_SECRET = process.env.STELLAR_PLATFORM_SECRET!;
 export const STELLAR_RECOVERY_SECRET = process.env.STELLAR_RECOVERY_SECRET!;
 export const STELLAR_TREASURY_SECRET = process.env.STELLAR_TREASURY_SECRET!;
