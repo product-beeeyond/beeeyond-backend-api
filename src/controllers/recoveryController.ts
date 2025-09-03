@@ -1,15 +1,17 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Response } from 'express';
-import { Op } from 'sequelize';
-import { Keypair } from '@stellar/stellar-sdk';
+// import { Op } from 'sequelize';
+// import { Keypair } from '@stellar/stellar-sdk';
 import { AuthRequest } from '../middleware/auth';
 import RecoveryRequest from '../models/RecoveryRequest';
 import RecoveryAuditLog from '../models/RecoveryAuditLog';
 import MultiSigWallet from '../models/MultiSigWallet';
-import MultiSigSigner from '../models/MultiSigSigner';
-import User from '../models/User';
-import { stellarService } from '../services/stellarService';
-import { encrypt } from '../utils/cypher';
+// import MultiSigSigner from '../models/MultiSigSigner';
+// import User from '../models/User';
+// import { stellarService } from '../services/stellarService';
+// import { encrypt } from '../utils/cypher';
 import logger from '../utils/logger';
+import { executeRecoveryProcess } from '../jobs/recoveryJobs';
 
 /**
  * User requests wallet recovery
@@ -20,7 +22,7 @@ export const requestRecovery = async (req: AuthRequest, res: Response) => {
     const { walletId, reason } = req.body;
     const userId = req.user!.id;
 
-    if (!recoveryRequest) {
+    if (!RecoveryRequest) {
       return res.status(404).json({ error: 'Recovery request not found' });
     }
 
@@ -112,7 +114,7 @@ export const getRecoveryStatus = async (req: AuthRequest, res: Response) => {
         failureReason: recoveryRequest.failureReason,
         retryCount: recoveryRequest.retryCount,
         createdAt: recoveryRequest.createdAt,
-        wallet: recoveryRequest.wallet
+        wallet: recoveryRequest.walletId
       }
     });
 

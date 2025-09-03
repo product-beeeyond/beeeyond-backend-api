@@ -522,12 +522,12 @@ export const BuyPropertyToken = async (req: AuthRequest, res: Response) => {
     // Update or create property holding
     const [holding] = await PropertyHolding.findOrCreate({
       where: { userId, propertyId },
-      defaults: {
-        tokensOwned: 0,
-        totalInvested: 0,
-        currentValue: 0,
-        averagePrice: 0,
-      },
+      // defaults: {
+      //   tokensOwned: 0,
+      //   totalInvested: 0,
+      //   currentValue: 0,
+      //   averagePrice: 0,
+      // },
       transaction: dbTransaction,
     });
 
