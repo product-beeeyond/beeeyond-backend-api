@@ -1,3 +1,5 @@
+/* eslint-disable unused-imports/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import Server, {
   Keypair,
@@ -155,8 +157,8 @@ class StellarService {
       const latestLedger = ledgerInfo.records[0];
 
       return {
-        baseReserve: parseFloat(latestLedger.base_reserve),
-        entryReserve: parseFloat(latestLedger.base_reserve), // On Stellar, entry reserve = base reserve
+        baseReserve: latestLedger.base_reserve_in_stroops,
+        entryReserve: latestLedger.base_reserve_in_stroops, // On Stellar, entry reserve = base reserve
       };
     } catch (error) {
       logger.warn("Failed to get network reserves, using defaults:", error);
@@ -223,7 +225,7 @@ class StellarService {
       // Create fee bump transaction with higher fee
       const feeBumpTransaction = TransactionBuilder.buildFeeBumpTransaction(
         feeSourceKeypair,
-        BASE_FEE * 2, // Use 2x base fee to ensure inclusion
+        String(parseInt(BASE_FEE) * 2), // Use 2x base fee to ensure inclusion
         innerTransaction,
         this.network
       );
@@ -1738,94 +1740,94 @@ class StellarService {
   /**
    * Enhanced token sale with trustline management
    */
-  async executeTokenSale(params: TokenSaleParams): Promise<string> {
-    try {
-      const {
-        userWalletPublicKey,
-        propertyWalletPublicKey,
-        assetCode,
-        assetIssuer,
-        amount,
-        proceedsAmount,
-      } = params;
+  // async executeTokenSale(params: TokenSaleParams): Promise<string> {
+  //   try {
+  //     const {
+  //       userWalletPublicKey,
+  //       propertyWalletPublicKey,
+  //       assetCode,
+  //       assetIssuer,
+  //       amount,
+  //       proceedsAmount,
+  //     } = params;
 
-      const asset = new Asset(assetCode, assetIssuer);
-      const ngnAsset = new Asset("NGN", this.platformKeypair.publicKey());
+  //     const asset = new Asset(assetCode, assetIssuer);
+  //     const ngnAsset = new Asset("NGN", this.platformKeypair.publicKey());
 
-      const userAccount = await this.server.loadAccount(userWalletPublicKey);
+  //     const userAccount = await this.server.loadAccount(userWalletPublicKey);
 
-      const userWallet = await MultiSigWallet.findOne({
-        where: { stellarPublicKey: userWalletPublicKey },
-        include: [
-          {
-            model: MultiSigSigner,
-            as: "signers",
-            where: { role: "user", status: "active" },
-          },
-        ],
-      });
+  //     const userWallet = await MultiSigWallet.findOne({
+  //       where: { stellarPublicKey: userWalletPublicKey },
+  //       include: [
+  //         {
+  //           model: MultiSigSigner,
+  //           as: "signers",
+  //           where: { role: "user", status: "active" },
+  //         },
+  //       ],
+  //     });
 
-      if (!userWallet || !userWallet.signers?.[0]) {
-        throw new Error("User wallet or signer not found");
-      }
+  //     if (!userWallet || !userWallet.signers?.[0]) {
+  //       throw new Error("User wallet or signer not found");
+  //     }
 
-      let signerKeypair: Keypair;
+  //     let signerKeypair: Keypair;
 
-      const recoverySigner = await MultiSigSigner.findOne({
-        where: {
-          multiSigWalletId: userWallet.id,
-          role: "platform_recovery",
-          status: "active",
-        },
-      });
+  //     const recoverySigner = await MultiSigSigner.findOne({
+  //       where: {
+  //         multiSigWalletId: userWallet.id,
+  //         role: "platform_recovery",
+  //         status: "active",
+  //       },
+  //     });
 
-      if (recoverySigner) {
-        signerKeypair = this.recoveryKeypair;
-      } else {
-        throw new Error("No valid signer available for transaction");
-      }
+  //     if (recoverySigner) {
+  //       signerKeypair = this.recoveryKeypair;
+  //     } else {
+  //       throw new Error("No valid signer available for transaction");
+  //     }
 
-      const transaction = new TransactionBuilder(userAccount, {
-        fee: BASE_FEE,
-        networkPassphrase: this.network,
-      })
-        .addOperation(
-          Operation.payment({
-            destination: propertyWalletPublicKey,
-            asset: asset,
-            amount: amount,
-          })
-        )
-        .addOperation(
-          Operation.payment({
-            destination: userWalletPublicKey,
-            asset: ngnAsset,
-            amount: proceedsAmount,
-            source: propertyWalletPublicKey,
-          })
-        )
-        .setTimeout(180)
-        .build();
+  //     const transaction = new TransactionBuilder(userAccount, {
+  //       fee: BASE_FEE,
+  //       networkPassphrase: this.network,
+  //     })
+  //       .addOperation(
+  //         Operation.payment({
+  //           destination: propertyWalletPublicKey,
+  //           asset: asset,
+  //           amount: amount,
+  //         })
+  //       )
+  //       .addOperation(
+  //         Operation.payment({
+  //           destination: userWalletPublicKey,
+  //           asset: ngnAsset,
+  //           amount: proceedsAmount,
+  //           source: propertyWalletPublicKey,
+  //         })
+  //       )
+  //       .setTimeout(180)
+  //       .build();
 
-      transaction.sign(signerKeypair);
-      const result = await this.submitTransactionWithFeeBump(
-        transaction,
-        signerKeypair
-      );
+  //     transaction.sign(signerKeypair);
+  //     const result = await this.submitTransactionWithFeeBump(
+  //       transaction,
+  //       signerKeypair
+  //     );
 
-      logger.info(
-        `Token sale executed: ${amount} ${assetCode} from ${userWalletPublicKey}`
-      );
-      return result.hash;
-    } catch (error) {
-      logger.error("Error executing token sale:", error);
-      throw new Error(
-        `Failed to execute token sale: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`
-      );
-    }
-  }
+  //     logger.info(
+  //       `Token sale executed: ${amount} ${assetCode} from ${userWalletPublicKey}`
+  //     );
+  //     return result.hash;
+  //   } catch (error) {
+  //     logger.error("Error executing token sale:", error);
+  //     throw new Error(
+  //       `Failed to execute token sale: ${
+  //         error instanceof Error ? error.message : "Unknown error"
+  //       }`
+  //     );
+  //   }
+  // }
 
   /**
    * Ensure account has required trustlines, adding them if needed
@@ -1838,7 +1840,15 @@ class StellarService {
       const account = await this.server.loadAccount(accountPublicKey);
       const existingTrustlines = account.balances
         .filter((b) => b.asset_type !== "native")
-        .map((b) => `${b.asset_code}:${b.asset_issuer}`);
+        .filter((b) => b.asset_type !== "liquidity_pool_shares") // Filter out liquidity pools
+        .map((b) => {
+          // Type guard to ensure we have asset_code and asset_issuer
+          if ("asset_code" in b && "asset_issuer" in b) {
+            return `${b.asset_code}:${b.asset_issuer}`;
+          }
+          return null;
+        })
+        .filter((trustline): trustline is string => trustline !== null); // Remove null values
 
       const neededTrustlines = assets.filter(
         (asset) =>
@@ -2000,7 +2010,7 @@ class StellarService {
           multiSigWalletId: walletId,
           role,
           status: "active",
-          encryptedPrivateKey: { [Op.not]: null },
+          encryptedPrivateKey: { [Op.not]: "" },
         },
       });
 
@@ -2019,95 +2029,104 @@ class StellarService {
   }
 
   /**
- * Create time-locked recovery transaction
- */
-async createRecoveryTransaction(params: {
-  walletPublicKey: string;
-  oldUserPublicKey: string;
-  newUserPublicKey: string;
-  recoveryRequestId: string;
-}): Promise<{transaction: any, xdr: string}> {
-  try {
-    const account = await this.server.loadAccount(params.walletPublicKey);
+   * Create time-locked recovery transaction
+   */
+  async createRecoveryTransaction(params: {
+    walletPublicKey: string;
+    oldUserPublicKey: string;
+    newUserPublicKey: string;
+    recoveryRequestId: string;
+  }): Promise<{ transaction: any; xdr: string }> {
+    try {
+      const account = await this.server.loadAccount(params.walletPublicKey);
 
-    const transaction = new TransactionBuilder(account, {
-      fee: BASE_FEE,
-      networkPassphrase: this.network,
-    })
-      // Remove old user signer
-      .addOperation(
-        Operation.setOptions({
-          signer: {
-            ed25519PublicKey: params.oldUserPublicKey,
-            weight: 0, // Setting weight to 0 removes the signer
-          },
-        })
-      )
-      // Add new user signer
-      .addOperation(
-        Operation.setOptions({
-          signer: {
-            ed25519PublicKey: params.newUserPublicKey,
-            weight: 2,
-          },
-        })
-      )
-      .setTimeout(180)
-      .build();
+      const transaction = new TransactionBuilder(account, {
+        fee: BASE_FEE,
+        networkPassphrase: this.network,
+      })
+        // Remove old user signer
+        .addOperation(
+          Operation.setOptions({
+            signer: {
+              ed25519PublicKey: params.oldUserPublicKey,
+              weight: 0, // Setting weight to 0 removes the signer
+            },
+          })
+        )
+        // Add new user signer
+        .addOperation(
+          Operation.setOptions({
+            signer: {
+              ed25519PublicKey: params.newUserPublicKey,
+              weight: 2,
+            },
+          })
+        )
+        .setTimeout(180)
+        .build();
 
-    // Sign with platform recovery key
-    transaction.sign(this.recoveryKeypair);
+      // Sign with platform recovery key
+      transaction.sign(this.recoveryKeypair);
 
-    logger.info(`Recovery transaction created for request: ${params.recoveryRequestId}`);
+      logger.info(
+        `Recovery transaction created for request: ${params.recoveryRequestId}`
+      );
 
-    return {
-      transaction,
-      xdr: transaction.toXDR()
-    };
-
-  } catch (error) {
-    logger.error('Error creating recovery transaction:', error);
-    throw error;
+      return {
+        transaction,
+        xdr: transaction.toXDR(),
+      };
+    } catch (error) {
+      logger.error("Error creating recovery transaction:", error);
+      throw error;
+    }
   }
-}
 
-/**
- * Execute recovery transaction with retry logic
- */
-async executeRecoveryTransaction(params: {
-  walletPublicKey: string;
-  oldUserPublicKey: string;
-  newUserPublicKey: string;
-  recoveryRequestId: string;
-  retryCount?: number;
-}): Promise<{
-  success: boolean;
-  transactionHash?: string;
-  error?: string;
-}> {
-  try {
-    const { transaction } = await this.createRecoveryTransaction(params);
-    
-    // Submit transaction with fee bump sponsorship
-    const result = await this.submitTransactionWithFeeBump(transaction, this.recoveryKeypair);
+  /**
+   * Execute recovery transaction with retry logic
+   */
+  async executeRecoveryTransaction(params: {
+    walletPublicKey: string;
+    oldUserPublicKey: string;
+    newUserPublicKey: string;
+    recoveryRequestId: string;
+    retryCount?: number;
+  }): Promise<{
+    success: boolean;
+    transactionHash?: string;
+    error?: string;
+  }> {
+    try {
+      const { transaction } = await this.createRecoveryTransaction(params);
 
-    logger.info(`Recovery transaction executed successfully: ${result.hash}`);
+      // Submit transaction with fee bump sponsorship
+      const result = await this.submitTransactionWithFeeBump(
+        transaction,
+        this.recoveryKeypair
+      );
 
-    return {
-      success: true,
-      transactionHash: result.hash
-    };
+      logger.info(`Recovery transaction executed successfully: ${result.hash}`);
 
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    logger.error(`Recovery transaction failed (attempt ${(params.retryCount || 0) + 1}):`, error);
+      return {
+        success: true,
+        transactionHash: result.hash,
+      };
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+      logger.error(
+        `Recovery transaction failed (attempt ${
+          (params.retryCount || 0) + 1
+        }):`,
+        error
+      );
 
-    return {
-      success: false,
-      error: errorMessage
-    };
+      return {
+        success: false,
+        error: errorMessage,
+      };
+    }
   }
-}
 }
 
 export const stellarService = new StellarService();

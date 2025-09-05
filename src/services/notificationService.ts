@@ -1,11 +1,10 @@
-/* eslint-disable unused-imports/no-unused-imports */
-/* eslint-disable unused-imports/no-unused-vars */
+ /* eslint-disable unused-imports/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import RecoveryRequest from '../models/RecoveryRequest';
 import User from '../models/User';
 import logger from '../utils/logger';
-import { emailService } from './emailService';
+// import { emailService } from './emailService';
 
 export class NotificationService {
   // ... existing methods ...
