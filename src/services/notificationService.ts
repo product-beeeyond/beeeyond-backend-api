@@ -5,7 +5,7 @@
 import RecoveryRequest from '../models/RecoveryRequest';
 import User from '../models/User';
 import logger from '../utils/logger';
-import { emailService } from './emailService';
+// import { emailService } from './emailService';
 
 export class NotificationService {
   // ... existing methods ...
