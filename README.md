@@ -1,4 +1,7 @@
 # Beeeyond-Backend Architecture
+
+
+
 ## **Project Overview**
 Beeeyond.africa is a real estate tokenization platform that enables fractional property investment and credit through blockchain technology. Our platform allows retail investors access African real estate starting from ₦10,000 (or $10) by purchasing tokenized fractions of properties.
 Our platform  enables property owners and developers to list their properties for tokenization, while providing investors with a comprehensive digital platform to build diversified real estate portfolios. The platform operates on the Stellar blockchain network for secure, transparent, and efficient token transactions, integrated with local Nigerian payment systems and regulatory compliance frameworks.
