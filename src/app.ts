@@ -40,15 +40,6 @@ app.use(morgan('combined', { stream: { write: (message) => logger.info(message.t
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Health check
-// app.get('/health', (req, res) => {
-//   res.json({
-//     status: 'OK',
-//     timestamp: new Date().toISOString(),
-//     uptime: process.uptime()
-//   });
-// });
-
 // API routes
 app.use('/api/v1', routes);
 

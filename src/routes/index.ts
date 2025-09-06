@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Router } from "express";
 import authRoutes from "./auth";
 // import propertyRoutes from './properties';
@@ -5,6 +6,8 @@ import authRoutes from "./auth";
 import adminRoutes from "./admin";
 import superAdminRoutes from "./superAdmin";
 import userRoutes from "./user";
+import axios from "axios";
+import { PING_URL } from "../config";
 // import multisigRoutes from './multisig';
 // Add to src/app.ts or main router file
 // import recoveryRoutes from './recovery';
@@ -22,6 +25,15 @@ router.get("/health", (req, res) => {
     version: "1.0.0",
   });
 });
+
+setInterval(async () => {
+  try {
+    const res = await axios.get(PING_URL);
+    console.log("Pinged server B:", res);
+  } catch (err: any) {
+    console.error("Error pinging server B:", err.message);
+  }
+}, 1000 * 60 * 4); // Every 4 minutes
 
 router.use("/auth", authRoutes);
 // router.use('/properties', propertyRoutes);
