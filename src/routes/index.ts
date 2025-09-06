@@ -29,9 +29,9 @@ router.get("/health", (req, res) => {
 setInterval(async () => {
   try {
     const res = await axios.get(PING_URL);
-    console.log("Pinged server B:", res);
+    console.log("checked server health:", res.data);
   } catch (err: any) {
-    console.error("Error pinging server B:", err.message);
+    console.error("Error checking server:", err.message);
   }
 }, 1000 * 60 * 4); // Every 4 minutes
 
