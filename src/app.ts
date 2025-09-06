@@ -20,6 +20,7 @@ import { apiLimiter } from './middleware/rateLimit';
 dotenv.config();
 
 const app = express();
+app.set("trust proxy", 1);  //needed for redis rate limiting
 const server = createServer(app);
 const io = new Server(server, {
   cors: {
