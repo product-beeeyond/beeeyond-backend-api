@@ -5,11 +5,11 @@
   "main": "dist/app.js",
   "scripts": {
     "dev": "nodemon dist/app.ts",
-    "build": "tsc",
+    "build": "node --max-old-space-size=1024 ./node_modules/.bin/tsc",
     "compile": "tsc -w",
     "lint": "eslint --ext .ts src",
     "lint:fix": "eslint --ext .ts src --fix",
-		 "lint:check": "eslint 'src/**/*.{js,ts}'",
+    "lint:check": "eslint 'src/**/*.{js,ts}'",
     "lint:unused": "eslint --fix-dry-run \"src/**/*.{js,ts}\"",
     "start": "node dist/app.js",
     "migrate": "npx sequelize-cli db:migrate",
