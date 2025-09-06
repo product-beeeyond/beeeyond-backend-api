@@ -12,6 +12,7 @@ import { PING_URL } from "../config";
 // Add to src/app.ts or main router file
 // import recoveryRoutes from './recovery';
 // import adminRecoveryRoutes from './routes/adminRecovery';
+import { authLimiter } from '../middleware/rateLimit';
 
 const router = Router();
 
@@ -35,7 +36,7 @@ setInterval(async () => {
   }
 }, 1000 * 60 * 4); // Every 4 minutes
 
-router.use("/auth", authRoutes);
+router.use("/auth", authLimiter, authRoutes);
 // router.use('/properties', propertyRoutes);
 // router.use('/investments', investmentRoutes);
 router.use("/user", userRoutes);

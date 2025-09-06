@@ -432,7 +432,7 @@ class StellarService {
       ]);
 
       logger.info(
-        `User recovery wallet created: ${walletKeypair.publicKey()} for user ${userId} with ${requiredBalance} XLM`
+        `User wallet created: ${walletKeypair.publicKey()} for user ${userId} with ${requiredBalance} XLM`
       );
 
       return {
