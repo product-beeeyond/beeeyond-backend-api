@@ -1,8 +1,13 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Response } from 'express';
 // import bcrypt from 'bcryptjs';
 import { AuthRequest, UserRole } from '../middleware/auth';
 import User from '../models/User';
+import logger from '../utils/logger';
+// import { smsService } from '../services/smsService';
+import { emailService } from '../services/emailService';
+import { Op } from 'sequelize';
 // // import { generateToken } from '../utils/jwt';
 // // import { sendWelcomeEmail } from '../utils/email';
 // import { BCRYPT_ROUNDS } from '../config';
@@ -316,6 +321,389 @@ export const promoteToAdmin = async (req: AuthRequest, res: Response) => {
 // };
 
 
+/**
+ * Approve or reject KYC for a user
+ * POST /api/admin/approve-kyc/:userId
+ * Body: { action: 'approve' | 'reject', reason?: string }
+ */
+export const approveKYC = async (req: AuthRequest, res: Response) => {
+  try {
+    const { userId } = req.params;
+    const { action, reason } = req.body;
+    const adminId = req.user?.id;
+    const adminEmail = req.user?.email;
+
+    // Validate input
+    if (!['approve', 'reject'].includes(action)) {
+      return res.status(400).json({ 
+        error: 'Invalid action. Must be "approve" or "reject"' 
+      });
+    }
+
+    if (action === 'reject' && !reason) {
+      return res.status(400).json({ 
+        error: 'Rejection reason is required when rejecting KYC' 
+      });
+    }
+
+    // Find the user
+    const user = await User.findByPk(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Check if user's KYC status allows for approval/rejection
+    // if (!['pending', 'under_review'].includes(user.kycStatus)) {
+    //   return res.status(400).json({ 
+    //     error: `Cannot ${action} KYC. Current status: ${user.kycStatus}`,
+    //     currentStatus: user.kycStatus
+    //   });
+    // }
+
+    // Store previous status for logging
+    const previousStatus = user.kycStatus;
+
+    // Determine new KYC status
+    const newKycStatus = action === 'approve' ? 'verified' : 'rejected';
+
+    // Update user's KYC status
+    await user.update({
+      kycStatus: newKycStatus,
+      // isVerified: action === 'approve'
+    });
+
+    // Log the KYC action for audit purposes
+    logger.info(`KYC ${action}d for user ${userId}`, {
+      userId,
+      adminId,
+      adminEmail,
+      action,
+      reason: reason || `KYC ${action}d by admin`,
+      previousStatus,
+      newStatus: newKycStatus,
+      timestamp: new Date().toISOString()
+    });
+
+    // Send notifications asynchronously
+    setImmediate(async () => {
+      try {
+        // Send email notification
+        if (user.email && user.firstName) {
+          await emailService.sendKYCStatusEmail(
+            user.email,
+            user.firstName,
+            newKycStatus
+          );
+          logger.info(`KYC ${action} email sent to ${user.email}`);
+        }
+
+        // Send SMS notification if phone number exists
+        // if (user.phone) {
+        //   await smsService.sendKYCUpdate(user.phone, newKycStatus);
+        //   logger.info(`KYC ${action} SMS sent to ${user.phone}`);
+        // }
+      } catch (notificationError) {
+        // Log notification errors but don't fail the main operation
+        logger.error(`Failed to send KYC ${action} notifications:`, notificationError);
+      }
+    });
+
+    // Prepare response data (exclude sensitive information)
+    const responseData = {
+      id: user.id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      phone: user.phone,
+      kycStatus: newKycStatus,
+      isVerified: user.isVerified,
+      updatedAt: user.updatedAt
+    };
+
+    res.json({
+      success: true,
+      message: `KYC ${action}d successfully`,
+      user: responseData,
+      action,
+      processedBy: {
+        adminId,
+        adminEmail,
+        processedAt: new Date().toISOString()
+      }
+    });
+
+  } catch (error) {
+    logger.error('KYC approval error:', error);
+    res.status(500).json({ 
+      error: 'Internal server error',
+      message: 'Failed to process KYC approval'
+    });
+  }
+};
+
+/**
+ * Get KYC pending approvals
+ * GET /api/admin/kyc/pending
+ */
+export const getPendingKYCApprovals = async (req: AuthRequest, res: Response) => {
+  try {
+    const { page = 1, limit = 20, search } = req.query;
+    const offset = (Number(page) - 1) * Number(limit);
+
+    // Build where clause
+    const whereClause: any = {
+      kycStatus: ['pending', 'under_review']
+    };
+
+    if (search) {
+      whereClause[Op.or] = [
+        { firstName: { [Op.iLike]: `%${search}%` } },
+        { lastName: { [Op.iLike]: `%${search}%` } },
+        { email: { [Op.iLike]: `%${search}%` } }
+      ];
+    }
+
+    const { rows: users, count } = await User.findAndCountAll({
+      where: whereClause,
+      attributes: [
+        'id', 'email', 'firstName', 'lastName', 'phone',
+        'kycStatus', 'isVerified', 'createdAt', 'updatedAt'
+      ],
+      order: [['createdAt', 'ASC']], // Oldest first for FIFO processing
+      limit: Number(limit),
+      offset
+    });
+
+    res.json({
+      success: true,
+      data: users,
+      pagination: {
+        currentPage: Number(page),
+        totalPages: Math.ceil(count / Number(limit)),
+        totalItems: count,
+        itemsPerPage: Number(limit)
+      }
+    });
+
+  } catch (error) {
+    logger.error('Get pending KYC approvals error:', error);
+    res.status(500).json({ 
+      error: 'Internal server error',
+      message: 'Failed to fetch pending KYC approvals'
+    });
+  }
+};
+
+/**
+ * Get KYC statistics for admin dashboard
+ * GET /api/admin/kyc/stats
+ */
+export const getKYCStats = async (req: AuthRequest, res: Response) => {
+  try {
+    const [
+      totalUsers,
+      pendingKYC,
+      verifiedKYC,
+      rejectedKYC,
+      underReviewKYC
+    ] = await Promise.all([
+      User.count(),
+      User.count({ where: { kycStatus: 'pending' } }),
+      User.count({ where: { kycStatus: 'verified' } }),
+      User.count({ where: { kycStatus: 'rejected' } }),
+      User.count({ where: { kycStatus: 'under_review' } })
+    ]);
+
+    // Calculate KYC completion rate
+    const kycCompletionRate = totalUsers > 0 
+      ? Math.round((verifiedKYC / totalUsers) * 100) 
+      : 0;
+
+    // Get recent KYC activity (last 7 days)
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    const recentActivity = await User.count({
+      where: {
+        updatedAt: { [Op.gte]: sevenDaysAgo },
+        kycStatus: ['verified', 'rejected']
+      }
+    });
+
+    res.json({
+      success: true,
+      stats: {
+        total: {
+          users: totalUsers,
+          verified: verifiedKYC,
+          pending: pendingKYC,
+          rejected: rejectedKYC,
+          underReview: underReviewKYC
+        },
+        percentages: {
+          verified: totalUsers > 0 ? Math.round((verifiedKYC / totalUsers) * 100) : 0,
+          pending: totalUsers > 0 ? Math.round((pendingKYC / totalUsers) * 100) : 0,
+          rejected: totalUsers > 0 ? Math.round((rejectedKYC / totalUsers) * 100) : 0,
+          underReview: totalUsers > 0 ? Math.round((underReviewKYC / totalUsers) * 100) : 0
+        },
+        completionRate: kycCompletionRate,
+        recentActivity: recentActivity
+      }
+    });
+
+  } catch (error) {
+    logger.error('Get KYC stats error:', error);
+    res.status(500).json({ 
+      error: 'Internal server error',
+      message: 'Failed to fetch KYC statistics'
+    });
+  }
+};
+
+/**
+ * Get user KYC details for admin review
+ * GET /api/admin/kyc/:userId/details
+ */
+export const getKYCDetails = async (req: AuthRequest, res: Response) => {
+  try {
+    const { userId } = req.params;
+
+    const user = await User.findByPk(userId, {
+      attributes: [
+        'id', 'email', 'firstName', 'lastName', 'phone', 'dateOfBirth',
+        'nationality', 'address', 'kycStatus', 'isVerified', 
+        'investmentExperience', 'riskTolerance', 'createdAt', 'updatedAt'
+      ]
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Return user profile information for KYC review
+    res.json({
+      success: true,
+      user: user.toJSON()
+    });
+
+  } catch (error) {
+    logger.error('Get KYC details error:', error);
+    res.status(500).json({ 
+      error: 'Internal server error',
+      message: 'Failed to fetch KYC details'
+    });
+  }
+};
+/**
+ * Bulk approve/reject KYC applications
+ * POST /api/admin/kyc/bulk-action
+ * Body: { userIds: string[], action: 'approve' | 'reject', reason?: string }
+ */
+export const bulkKYCAction = async (req: AuthRequest, res: Response) => {
+  try {
+    const { userIds, action, reason } = req.body;
+    const adminId = req.user?.id;
+    const adminEmail = req.user?.email;
+
+    // Validate input
+    if (!Array.isArray(userIds) || userIds.length === 0) {
+      return res.status(400).json({ 
+        error: 'userIds must be a non-empty array' 
+      });
+    }
+
+    if (!['approve', 'reject'].includes(action)) {
+      return res.status(400).json({ 
+        error: 'Invalid action. Must be "approve" or "reject"' 
+      });
+    }
+
+    if (action === 'reject' && !reason) {
+      return res.status(400).json({ 
+        error: 'Rejection reason is required when rejecting KYC' 
+      });
+    }
+
+    // Find users
+    const users = await User.findAll({
+      where: {
+        id: userIds,
+        kycStatus: ['pending', 'under_review']
+      }
+    });
+
+    if (users.length === 0) {
+      return res.status(404).json({ 
+        error: 'No eligible users found for bulk action' 
+      });
+    }
+
+    // Determine new KYC status
+    const newKycStatus = action === 'approve' ? 'verified' : 'rejected';
+
+    // Update all users
+    const updatePromises = users.map(user => 
+      user.update({
+        kycStatus: newKycStatus,
+        isVerified: action === 'approve'
+      })
+    );
+
+    await Promise.all(updatePromises);
+
+    // Log bulk action
+    logger.info(`Bulk KYC ${action} completed`, {
+      adminId,
+      adminEmail,
+      action,
+      reason,
+      userCount: users.length,
+      userIds: users.map(u => u.id),
+      timestamp: new Date().toISOString()
+    });
+
+    // Send notifications (fire and forget)
+    setImmediate(async () => {
+      for (const user of users) {
+        try {
+          if (user.email && user.firstName) {
+            await emailService.sendKYCStatusEmail(
+              user.email,
+              user.firstName,
+              newKycStatus
+            );
+          }
+          // if (user.phone) {
+          //   await smsService.sendKYCUpdate(user.phone, newKycStatus);
+          // }
+        } catch (notificationError) {
+          logger.error(`Failed to send bulk notification to user ${user.id}:`, notificationError);
+        }
+      }
+    });
+
+    res.json({
+      success: true,
+      message: `Bulk KYC ${action} completed successfully`,
+      processedCount: users.length,
+      action,
+      processedBy: {
+        adminId,
+        adminEmail,
+        processedAt: new Date().toISOString()
+      }
+    });
+
+  } catch (error) {
+    logger.error('Bulk KYC action error:', error);
+    res.status(500).json({ 
+      error: 'Internal server error',
+      message: 'Failed to process bulk KYC action'
+    });
+  }
+};
+
+//----wallet recovery-------\\
 // /**
 //  * Get recovery audit log
 //  * GET /api/admin/recovery/:requestId/audit

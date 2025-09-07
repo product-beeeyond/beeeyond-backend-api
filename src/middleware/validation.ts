@@ -708,3 +708,348 @@ export const validateDynamicProposalData = (req: Request, res: Response, next: N
     });
   }
 };
+
+import { AuthRequest } from '../middleware/auth';
+import logger from '../utils/logger';
+
+/**
+ * Validation middleware using Joi (following existing codebase patterns)
+ */
+export const validateRequest = (schema: Joi.ObjectSchema) => {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const { error, value } = schema.validate(req.body, { abortEarly: false });
+
+    if (error) {
+      const errors = error.details.map((detail) => ({
+        field: detail.path.join('.'),
+        message: detail.message,
+      }));
+
+      return res.status(400).json({
+        error: 'Validation failed',
+        details: errors,
+      });
+    }
+
+    // Replace req.body with validated and sanitized data
+    req.body = value;
+    next();
+  };
+};
+
+export const validateQuery = (schema: Joi.ObjectSchema) => {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const { error, value } = schema.validate(req.query, { abortEarly: false });
+
+    if (error) {
+      const errors = error.details.map((detail) => ({
+        field: detail.path.join('.'),
+        message: detail.message,
+      }));
+
+      return res.status(400).json({
+        error: 'Query validation failed',
+        details: errors,
+      });
+    }
+
+    req.query = value;
+    next();
+  };
+};
+
+export const validateParams = (schema: Joi.ObjectSchema) => {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const { error, value } = schema.validate(req.params, { abortEarly: false });
+
+    if (error) {
+      const errors = error.details.map((detail) => ({
+        field: detail.path.join('.'),
+        message: detail.message,
+      }));
+
+      return res.status(400).json({
+        error: 'Parameter validation failed',
+        details: errors,
+      });
+    }
+
+    req.params = value;
+    next();
+  };
+};
+
+// ===========================================
+// KYC VALIDATION SCHEMAS
+// ===========================================
+
+/**
+ * Schema for KYC approval/rejection
+ */
+export const kycApprovalSchema = Joi.object({
+  action: Joi.string()
+    .valid('approve', 'reject')
+    .required()
+    .messages({
+      'any.only': 'Action must be either "approve" or "reject"',
+      'any.required': 'Action is required'
+    }),
+  
+  reason: Joi.when('action', {
+    is: 'reject',
+    then: Joi.string()
+      .min(10)
+      .max(500)
+      .required()
+      .messages({
+        'string.min': 'Rejection reason must be at least 10 characters',
+        'string.max': 'Rejection reason cannot exceed 500 characters',
+        'any.required': 'Rejection reason is required when rejecting KYC'
+      }),
+    otherwise: Joi.string()
+      .min(10)
+      .max(500)
+      .optional()
+      .messages({
+        'string.min': 'Reason must be at least 10 characters',
+        'string.max': 'Reason cannot exceed 500 characters'
+      })
+  })
+});
+
+/**
+ * Schema for bulk KYC actions
+ */
+export const bulkKycActionSchema = Joi.object({
+  userIds: Joi.array()
+    .items(
+      Joi.string()
+        .uuid()
+        .required()
+        .messages({
+          'string.guid': 'Each user ID must be a valid UUID'
+        })
+    )
+    .min(1)
+    .max(50)
+    .required()
+    .messages({
+      'array.min': 'At least one user ID is required',
+      'array.max': 'Cannot process more than 50 users at once',
+      'any.required': 'User IDs array is required'
+    }),
+  
+  action: Joi.string()
+    .valid('approve', 'reject')
+    .required()
+    .messages({
+      'any.only': 'Action must be either "approve" or "reject"',
+      'any.required': 'Action is required'
+    }),
+  
+  reason: Joi.when('action', {
+    is: 'reject',
+    then: Joi.string()
+      .min(10)
+      .max(500)
+      .required()
+      .messages({
+        'string.min': 'Rejection reason must be at least 10 characters',
+        'string.max': 'Rejection reason cannot exceed 500 characters',
+        'any.required': 'Rejection reason is required when rejecting KYC applications'
+      }),
+    otherwise: Joi.string()
+      .min(10)
+      .max(500)
+      .optional()
+      .messages({
+        'string.min': 'Reason must be at least 10 characters',
+        'string.max': 'Reason cannot exceed 500 characters'
+      })
+  })
+});
+
+/**
+ * Schema for KYC under review
+ */
+export const kycUnderReviewSchema = Joi.object({
+  notes: Joi.string()
+    .max(1000)
+    .optional()
+    .allow('')
+    .messages({
+      'string.max': 'Notes cannot exceed 1000 characters'
+    })
+});
+
+/**
+ * Schema for pending KYC query parameters
+ */
+export const pendingKycQuerySchema = Joi.object({
+  page: Joi.number()
+    .integer()
+    .min(1)
+    .default(1)
+    .messages({
+      'number.base': 'Page must be a number',
+      'number.integer': 'Page must be an integer',
+      'number.min': 'Page must be at least 1'
+    }),
+  
+  limit: Joi.number()
+    .integer()
+    .min(1)
+    .max(100)
+    .default(20)
+    .messages({
+      'number.base': 'Limit must be a number',
+      'number.integer': 'Limit must be an integer',
+      'number.min': 'Limit must be at least 1',
+      'number.max': 'Limit cannot exceed 100'
+    }),
+  
+  search: Joi.string()
+    .min(2)
+    .max(50)
+    .optional()
+    .messages({
+      'string.min': 'Search query must be at least 2 characters',
+      'string.max': 'Search query cannot exceed 50 characters'
+    })
+});
+
+/**
+ * Schema for KYC overview query parameters
+ */
+export const kycOverviewQuerySchema = Joi.object({
+  page: Joi.number()
+    .integer()
+    .min(1)
+    .default(1)
+    .messages({
+      'number.base': 'Page must be a number',
+      'number.integer': 'Page must be an integer',
+      'number.min': 'Page must be at least 1'
+    }),
+  
+  limit: Joi.number()
+    .integer()
+    .min(1)
+    .max(100)
+    .default(50)
+    .messages({
+      'number.base': 'Limit must be a number',
+      'number.integer': 'Limit must be an integer',
+      'number.min': 'Limit must be at least 1',
+      'number.max': 'Limit cannot exceed 100'
+    }),
+  
+  status: Joi.string()
+    .valid('pending', 'under_review', 'verified', 'rejected')
+    .optional()
+    .messages({
+      'any.only': 'Status must be one of: pending, under_review, verified, rejected'
+    }),
+  
+  search: Joi.string()
+    .min(2)
+    .max(50)
+    .optional()
+    .messages({
+      'string.min': 'Search query must be at least 2 characters',
+      'string.max': 'Search query cannot exceed 50 characters'
+    })
+});
+
+/**
+ * Schema for user ID parameter validation
+ */
+export const userIdParamSchema = Joi.object({
+  userId: Joi.string()
+    .uuid()
+    .required()
+    .messages({
+      'string.guid': 'Invalid user ID format',
+      'any.required': 'User ID is required'
+    })
+});
+
+// ===========================================
+// VALIDATION MIDDLEWARE FUNCTIONS
+// ===========================================
+
+/**
+ * Validation middleware for KYC approval endpoint
+ */
+export const validateKYCApproval = [
+  validateParams(userIdParamSchema),
+  validateRequest(kycApprovalSchema)
+];
+
+/**
+ * Validation middleware for bulk KYC action endpoint
+ */
+export const validateBulkKYCAction = [
+  validateRequest(bulkKycActionSchema)
+];
+
+/**
+ * Validation middleware for pending KYC query parameters
+ */
+export const validatePendingKYCQuery = [
+  validateQuery(pendingKycQuerySchema)
+];
+
+/**
+ * Validation middleware for KYC overview query parameters
+ */
+export const validateKYCOverviewQuery = [
+  validateQuery(kycOverviewQuerySchema)
+];
+
+/**
+ * Validation middleware for KYC details endpoint
+ */
+export const validateKYCDetails = [
+  validateParams(userIdParamSchema)
+];
+
+/**
+ * Validation middleware for setting KYC under review
+ */
+export const validateKYCUnderReview = [
+  validateParams(userIdParamSchema),
+  validateRequest(kycUnderReviewSchema)
+];
+
+/**
+ * Rate limiting middleware for KYC operations
+ */
+export const kycRateLimit = (req: AuthRequest, res: Response, next: NextFunction) => {
+  // You can implement rate limiting here using redis or memory store
+  // This is a placeholder for now
+  next();
+};
+
+/**
+ * Audit logging middleware for KYC operations
+ */
+export const auditKYCOperation = (action: string) => {
+  return (req: AuthRequest, res: Response, next: NextFunction) => {
+    // Log the operation using the app logger
+    logger.info(`KYC Audit: ${action}`, {
+      adminId: req.user?.id,
+      adminEmail: req.user?.email,
+      userId: req.params?.userId,
+      userIds: req.body?.userIds,
+      requestedAction: req.body?.action || action,
+      timestamp: new Date().toISOString(),
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      method: req.method,
+      url: req.originalUrl
+    });
+    
+    next();
+  };
+};
