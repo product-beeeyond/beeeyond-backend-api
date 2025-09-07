@@ -1,8 +1,8 @@
 import express from 'express';
-// import {
-//   authenticate,
-//   requireSuperAdmin
-// } from '../middleware/auth';
+import {
+  authenticate,
+  requireSuperAdmin
+} from '../middleware/auth';
 import {
 //   createAdmin,
 //   getAllAdmins,
@@ -49,7 +49,7 @@ const validateUserId = [
 // ];
 
 // // All routes require super admin access
-// router.use(authenticate, requireSuperAdmin);
+router.use(authenticate, requireSuperAdmin);
 
 // // Create new admin user
 // router.post('/create', validateCreateAdmin, createAdmin);
