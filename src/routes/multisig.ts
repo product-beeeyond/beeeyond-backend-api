@@ -244,7 +244,7 @@ const validatePublicKey = (req: any, res: any, next: any) => {
 };
 
 const validateCreatePlatformWallet = (req: any, res: any, next: any) => {
-  const { walletType, description } = req.body;
+  const { walletType } = req.body;
   const validTypes = ["treasury", "issuer", "distribution", "fee_collection"];
 
   if (!walletType || !validTypes.includes(walletType)) {
@@ -253,11 +253,11 @@ const validateCreatePlatformWallet = (req: any, res: any, next: any) => {
     });
   }
 
-  if (!description || description.trim().length < 10) {
-    return res.status(400).json({
-      error: "Description must be at least 10 characters long",
-    });
-  }
+  // if (!description || description.trim().length < 10) {
+  //   return res.status(400).json({
+  //     error: "Description must be at least 10 characters long",
+  //   });
+  // }
 
   next();
 };
@@ -380,7 +380,7 @@ router.get("/user/wallets", authenticate, listUserWallets);
  * POST /api/multisig/platform/wallets
  */
 router.post(
-  "/platform/wallets",
+  "/create-platform-wallets",
   authenticate,
   requireSuperAdmin,
   validateCreatePlatformWallet,

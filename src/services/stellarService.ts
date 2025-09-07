@@ -1,7 +1,7 @@
 /* eslint-disable unused-imports/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import Server, {
+import {
   Keypair,
   Asset,
   Operation,
@@ -76,7 +76,7 @@ class StellarService {
     this.validateEnvironmentVariables();
     this.network =
       STELLAR_NETWORK === "mainnet" ? Networks.PUBLIC : Networks.TESTNET;
-    this.server = new Server(STELLAR_HORIZON_URL!);
+    this.server = new Horizon.Server(STELLAR_HORIZON_URL!);
 
     try {
       this.platformKeypair = Keypair.fromSecret(STELLAR_PLATFORM_SECRET!);
