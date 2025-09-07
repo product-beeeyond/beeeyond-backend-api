@@ -14,11 +14,13 @@ import { errorHandler } from "./middleware/errorHandler";
 import { notFound } from "./middleware/errorHandler";
 import logger from './utils/logger';
 import { FRONTEND_URL, NODE_ENV, PORT } from './config';
+import { apiLimiter } from './middleware/rateLimit';
 
 // Load environment variables
 dotenv.config();
 
 const app = express();
+app.set("trust proxy", 1);  //needed for redis rate limiting
 const server = createServer(app);
 const io = new Server(server, {
   cors: {
@@ -40,17 +42,8 @@ app.use(morgan('combined', { stream: { write: (message) => logger.info(message.t
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Health check
-// app.get('/health', (req, res) => {
-//   res.json({
-//     status: 'OK',
-//     timestamp: new Date().toISOString(),
-//     uptime: process.uptime()
-//   });
-// });
-
 // API routes
-app.use('/api/v1', routes);
+app.use('/api/v1', apiLimiter, routes);
 
 // Socket.IO for real-time features
 io.on('connection', (socket) => {

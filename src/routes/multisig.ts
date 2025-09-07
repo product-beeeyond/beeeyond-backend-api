@@ -1,266 +1,266 @@
-// /* eslint-disable @typescript-eslint/no-explicit-any */
-// // // src/routes/multisig.ts
-// // import { Router } from 'express';
-// // import { authenticate, requireAdmin, requireKYC, requireSuperAdmin } from '../middleware/auth';
-// // import { validate, multisigWalletSchema, multisigTransactionSchema, governanceProposalSchema } from '../middleware/validation';
-// // import {
-// //   // Wallet Management
-// //    createUserMultisigWallet,
-// //   createPlatformWallets,
-// //   createPropertyWallets,
-// //   recoverUserWallet,
-// //   getWalletInfo,
-// //   listUserWallets,
-// //   addSigner,
-// //   removeSigner,
-
-// //   // Transaction Management
-// //   // proposeMultiSigTransaction,
-// //   // signMultiSigTransaction,
-// //   // executeMultiSigTransaction,
-// //   // getPendingTransactions,
-// //   // getTransactionHistory,
-
-// //   // Governance
-// //   // createGovernanceProposal,
-// //   // voteOnProposal,
-// //   // getGovernanceProposals,
-
-// //   // Revenue Distribution
-// //   // createRevenueDistribution,
-// // } from '../controllers/multisigController';
-
-// // const router = Router();
-
-// // // ===========================================
-// // // USER WALLET ROUTES
-// // // ===========================================
-
-// // /**
-// //  * Create recovery wallet for KYC-verified user
-// //  * POST /api/multisig/user/wallet
-// //  */
-// // router.post('/user/wallet',
-// //   authenticate,
-// //   requireKYC,
-// //   createUserMultisigWallet
-// // );
-
-// // router.get('/user/wallets',
-// //   authenticate,
-// //   listUserWallets
-// // );
-
-// // router.post('/user/:userId/recover',
-// //   authenticate,
-// //   requireAdmin,
-// //   validateWalletRecovery,
-// //   recoverUserWallet
-// // );
-
-// // // // Add signer to multisig wallet (Admin only)
-// // // router.post(
-// // //   '/wallets/signers',
-// // //   authenticate,
-// // //   requireAdmin,
-// // //   addSigner
-// // // );
-
-// // // // Remove signer from multisig wallet (Admin only)
-// // // router.delete(
-// // //   '/wallets/signers/:signerId',
-// // //   authenticate,
-// // //   requireAdmin,
-// // //   removeSigner
-// // // );
-
-// // // ===========================================
-// // // PLATFORM WALLET ROUTES
-// // // ===========================================
-
-// // /**
-// //  * Create platform wallets (Super Admin only)
-// //  * POST /api/multisig/platform/wallets
-// //  */
-// // router.post('/platform/wallets',
-// //   authenticate,
-// //   requireSuperAdmin,
-// //   validateCreatePlatformWallet,
-// //   createPlatformWallets
-// // );
-// // // ===========================================
-// // // PROPERTY WALLET ROUTES
-// // // ===========================================
-
-// // /**
-// //  * Create property-specific wallets (Admin only)
-// //  * POST /api/multisig/property/:propertyId/wallets
-// //  */
-// // router.post('/property/:propertyId/wallets',
-// //   authenticate,
-// //   requireAdmin,
-// //   validatePropertyId,
-// //   createPropertyWallets
-// // );
-
-// // // ===========================================
-// // // UTILITY ROUTES
-// // // ===========================================
-
-// // /**
-// //  * Get wallet information
-// //  * GET /api/multisig/wallet/:publicKey
-// //  */
-// // router.get('/wallet/:publicKey',
-// //   authenticate,
-// //   requireAdmin,
-// //   validatePublicKey,
-// //   getWalletInfo
-// // );
-// // // ===========================================
-// // // MULTISIG TRANSACTION ROUTES
-// // // ===========================================
-
-// // // // Propose a multisig transaction
-// // // router.post(
-// // //   '/transactions/propose',
-// // //   authenticate,
-// // //   requireKYC,
-// // //   validate(multisigTransactionSchema),
-// // //   proposeMultiSigTransaction
-// // // );
-
-// // // // Sign a multisig transaction
-// // // router.post(
-// // //   '/transactions/:proposalId/sign',
-// // //   authenticate,
-// // //   requireKYC,
-// // //   signMultiSigTransaction
-// // // );
-
-// // // // Execute a multisig transaction
-// // // router.post(
-// // //   '/transactions/:proposalId/execute',
-// // //   authenticate,
-// // //   requireKYC,
-// // //   executeMultiSigTransaction
-// // // );
-
-// // // // Get pending transactions for a wallet
-// // // router.get(
-// // //   '/transactions/pending/:walletPublicKey',
-// // //   authenticate,
-// // //   getPendingTransactions
-// // // );
-
-// // // // Get transaction history for a wallet
-// // // router.get(
-// // //   '/transactions/history/:walletPublicKey',
-// // //   authenticate,
-// // //   getTransactionHistory
-// // // );
-
-// // // ===========================================
-// // // GOVERNANCE ROUTES
-// // // ===========================================
-
-// // // // Create governance proposal
-// // // router.post(
-// // //   '/governance/proposals',
-// // //   authenticate,
-// // //   requireKYC,
-// // //   validate(governanceProposalSchema),
-// // //   createGovernanceProposal
-// // // );
-
-// // // // Vote on governance proposal
-// // // router.post(
-// // //   '/governance/proposals/:proposalId/vote',
-// // //   authenticate,
-// // //   requireKYC,
-// // //   voteOnProposal
-// // // );
-
-// // // Get governance proposals for a property
-// // // router.get(
-// // //   '/governance/proposals/:propertyId',
-// // //   authenticate,
-// // //   getGovernanceProposals
-// // // );
-
-// // // ===========================================
-// // // REVENUE DISTRIBUTION ROUTES
-// // // ===========================================
-
-// // // // Create revenue distribution (Admin only)
-// // // router.post(
-// // //   '/revenue/distribute',
-// // //   authenticate,
-// // //   requireAdmin,
-// // //   createRevenueDistribution
-// // // );
-
-// // export default router;
-
-// import { Router } from "express";
-// import {
-//   authenticate,
-//   requireAdmin,
-//   requireKYC,
-//   requireSuperAdmin,
-// } from "../middleware/auth";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// // src/routes/multisig.ts
+// import { Router } from 'express';
+// import { authenticate, requireAdmin, requireKYC, requireSuperAdmin } from '../middleware/auth';
+// import { validate, multisigWalletSchema, multisigTransactionSchema, governanceProposalSchema } from '../middleware/validation';
 // import {
 //   // Wallet Management
-//   createUserMultisigWallet,
+//    createUserMultisigWallet,
 //   createPlatformWallets,
 //   createPropertyWallets,
 //   recoverUserWallet,
 //   getWalletInfo,
 //   listUserWallets,
-// } from "../controllers/multisigController";
+//   addSigner,
+//   removeSigner,
+
+//   // Transaction Management
+//   // proposeMultiSigTransaction,
+//   // signMultiSigTransaction,
+//   // executeMultiSigTransaction,
+//   // getPendingTransactions,
+//   // getTransactionHistory,
+
+//   // Governance
+//   // createGovernanceProposal,
+//   // voteOnProposal,
+//   // getGovernanceProposals,
+
+//   // Revenue Distribution
+//   // createRevenueDistribution,
+// } from '../controllers/multisigController';
 
 // const router = Router();
 
 // // ===========================================
-// // VALIDATION MIDDLEWARE
+// // USER WALLET ROUTES
 // // ===========================================
 
-// const validatePropertyId = (req: any, res: any, next: any) => {
-//   const { propertyId } = req.params;
-//   if (!propertyId || propertyId.length < 1) {
-//     return res.status(400).json({ error: "Valid property ID is required" });
-//   }
-//   next();
-// };
+// /**
+//  * Create recovery wallet for KYC-verified user
+//  * POST /api/multisig/user/wallet
+//  */
+// router.post('/user/wallet',
+//   authenticate,
+//   requireKYC,
+//   createUserMultisigWallet
+// );
 
-// const validatePublicKey = (req: any, res: any, next: any) => {
-//   const { publicKey } = req.params;
-//   if (!publicKey || publicKey.length !== 56) {
-//     return res
-//       .status(400)
-//       .json({ error: "Valid Stellar public key is required (56 characters)" });
-//   }
-//   next();
-// };
+// router.get('/user/wallets',
+//   authenticate,
+//   listUserWallets
+// );
 
-// const validateCreatePlatformWallet = (req: any, res: any, next: any) => {
-//   const { walletType, description } = req.body;
-//   const validTypes = ["treasury", "issuer", "distribution", "fee_collection"];
+// router.post('/user/:userId/recover',
+//   authenticate,
+//   requireAdmin,
+//   validateWalletRecovery,
+//   recoverUserWallet
+// );
 
-//   if (!walletType || !validTypes.includes(walletType)) {
-//     return res.status(400).json({
-//       error: `Invalid wallet type. Must be one of: ${validTypes.join(", ")}`,
-//     });
-//   }
+// // // Add signer to multisig wallet (Admin only)
+// // router.post(
+// //   '/wallets/signers',
+// //   authenticate,
+// //   requireAdmin,
+// //   addSigner
+// // );
 
-//   if (!description || description.trim().length < 10) {
-//     return res.status(400).json({
-//       error: "Description must be at least 10 characters long",
-//     });
-//   }
+// // // Remove signer from multisig wallet (Admin only)
+// // router.delete(
+// //   '/wallets/signers/:signerId',
+// //   authenticate,
+// //   requireAdmin,
+// //   removeSigner
+// // );
 
-//   next();
-// };
+// // ===========================================
+// // PLATFORM WALLET ROUTES
+// // ===========================================
+
+// /**
+//  * Create platform wallets (Super Admin only)
+//  * POST /api/multisig/platform/wallets
+//  */
+// router.post('/platform/wallets',
+//   authenticate,
+//   requireSuperAdmin,
+//   validateCreatePlatformWallet,
+//   createPlatformWallets
+// );
+// // ===========================================
+// // PROPERTY WALLET ROUTES
+// // ===========================================
+
+// /**
+//  * Create property-specific wallets (Admin only)
+//  * POST /api/multisig/property/:propertyId/wallets
+//  */
+// router.post('/property/:propertyId/wallets',
+//   authenticate,
+//   requireAdmin,
+//   validatePropertyId,
+//   createPropertyWallets
+// );
+
+// // ===========================================
+// // UTILITY ROUTES
+// // ===========================================
+
+// /**
+//  * Get wallet information
+//  * GET /api/multisig/wallet/:publicKey
+//  */
+// router.get('/wallet/:publicKey',
+//   authenticate,
+//   requireAdmin,
+//   validatePublicKey,
+//   getWalletInfo
+// );
+// // ===========================================
+// // MULTISIG TRANSACTION ROUTES
+// // ===========================================
+
+// // // Propose a multisig transaction
+// // router.post(
+// //   '/transactions/propose',
+// //   authenticate,
+// //   requireKYC,
+// //   validate(multisigTransactionSchema),
+// //   proposeMultiSigTransaction
+// // );
+
+// // // Sign a multisig transaction
+// // router.post(
+// //   '/transactions/:proposalId/sign',
+// //   authenticate,
+// //   requireKYC,
+// //   signMultiSigTransaction
+// // );
+
+// // // Execute a multisig transaction
+// // router.post(
+// //   '/transactions/:proposalId/execute',
+// //   authenticate,
+// //   requireKYC,
+// //   executeMultiSigTransaction
+// // );
+
+// // // Get pending transactions for a wallet
+// // router.get(
+// //   '/transactions/pending/:walletPublicKey',
+// //   authenticate,
+// //   getPendingTransactions
+// // );
+
+// // // Get transaction history for a wallet
+// // router.get(
+// //   '/transactions/history/:walletPublicKey',
+// //   authenticate,
+// //   getTransactionHistory
+// // );
+
+// // ===========================================
+// // GOVERNANCE ROUTES
+// // ===========================================
+
+// // // Create governance proposal
+// // router.post(
+// //   '/governance/proposals',
+// //   authenticate,
+// //   requireKYC,
+// //   validate(governanceProposalSchema),
+// //   createGovernanceProposal
+// // );
+
+// // // Vote on governance proposal
+// // router.post(
+// //   '/governance/proposals/:proposalId/vote',
+// //   authenticate,
+// //   requireKYC,
+// //   voteOnProposal
+// // );
+
+// // Get governance proposals for a property
+// // router.get(
+// //   '/governance/proposals/:propertyId',
+// //   authenticate,
+// //   getGovernanceProposals
+// // );
+
+// // ===========================================
+// // REVENUE DISTRIBUTION ROUTES
+// // ===========================================
+
+// // // Create revenue distribution (Admin only)
+// // router.post(
+// //   '/revenue/distribute',
+// //   authenticate,
+// //   requireAdmin,
+// //   createRevenueDistribution
+// // );
+
+// export default router;
+
+import { Router } from "express";
+import {
+  authenticate,
+  requireAdmin,
+  requireKYC,
+  requireSuperAdmin,
+} from "../middleware/auth";
+import {
+  // Wallet Management
+  createUserMultisigWallet,
+  createPlatformWallets,
+  createPropertyWallets,
+  // recoverUserWallet,
+  getWalletInfo,
+  listUserWallets,
+} from "../controllers/multisigController";
+
+const router = Router();
+
+// ===========================================
+// VALIDATION MIDDLEWARE
+// ===========================================
+
+const validatePropertyId = (req: any, res: any, next: any) => {
+  const { propertyId } = req.params;
+  if (!propertyId || propertyId.length < 1) {
+    return res.status(400).json({ error: "Valid property ID is required" });
+  }
+  next();
+};
+
+const validatePublicKey = (req: any, res: any, next: any) => {
+  const { publicKey } = req.params;
+  if (!publicKey || publicKey.length !== 56) {
+    return res
+      .status(400)
+      .json({ error: "Valid Stellar public key is required (56 characters)" });
+  }
+  next();
+};
+
+const validateCreatePlatformWallet = (req: any, res: any, next: any) => {
+  const { walletType, description } = req.body;
+  const validTypes = ["treasury", "issuer", "distribution", "fee_collection"];
+
+  if (!walletType || !validTypes.includes(walletType)) {
+    return res.status(400).json({
+      error: `Invalid wallet type. Must be one of: ${validTypes.join(", ")}`,
+    });
+  }
+
+  if (!description || description.trim().length < 10) {
+    return res.status(400).json({
+      error: "Description must be at least 10 characters long",
+    });
+  }
+
+  next();
+};
 
 // const validateWalletRecovery = (req: any, res: any, next: any) => {
 //   const { userId } = req.params;
@@ -343,90 +343,90 @@
 //   next();
 // };
 
-// // ===========================================
-// // USER WALLET ROUTES
-// // ===========================================
+// ===========================================
+// USER WALLET ROUTES
+// ===========================================
 
-// /**
-//  * Create recovery wallet for KYC-verified user
-//  * POST /api/multisig/user/wallet
-//  */
-// router.post("/user/wallet", authenticate, requireKYC, createUserMultisigWallet);
+/**
+ * Create recovery wallet for KYC-verified user
+ * POST /api/multisig/user/wallet
+ */
+router.post("/user/wallet", authenticate, requireKYC, createUserMultisigWallet);
 
-// /**
-//  * List user's multisig wallets
-//  * GET /api/multisig/user/wallets
-//  */
-// router.get("/user/wallets", authenticate, listUserWallets);
+/**
+ * List user's multisig wallets
+ * GET /api/multisig/user/wallets
+ */
+router.get("/user/wallets", authenticate, listUserWallets);
 
-// /** ---DEPRECATED----
-//  * Recover user wallet (Admin only)
-//  * POST /api/multisig/user/:userId/recover
-//  */
-// // router.post(
-// //   "/user/:userId/recover",
-// //   authenticate,
-// //   requireAdmin,
-// //   validateWalletRecovery,
-// //   recoverUserWallet
-// // );
-
-// // ===========================================
-// // PLATFORM WALLET ROUTES
-// // ===========================================
-
-// /**
-//  * Create platform wallets (Super Admin only)
-//  * POST /api/multisig/platform/wallets
-//  */
+/** ---DEPRECATED----
+ * Recover user wallet (Admin only)
+ * POST /api/multisig/user/:userId/recover
+ */
 // router.post(
-//   "/platform/wallets",
-//   authenticate,
-//   requireSuperAdmin,
-//   validateCreatePlatformWallet,
-//   createPlatformWallets
-// );
-
-// // ===========================================
-// // PROPERTY WALLET ROUTES
-// // ===========================================
-
-// /**
-//  * Create property-specific wallets (Admin only)
-//  * POST /api/multisig/property/:propertyId/wallets
-//  */
-// router.post(
-//   "/property/:propertyId/wallets",
+//   "/user/:userId/recover",
 //   authenticate,
 //   requireAdmin,
-//   validatePropertyId,
-//   createPropertyWallets
+//   validateWalletRecovery,
+//   recoverUserWallet
 // );
 
-// // ===========================================
-// // UTILITY ROUTES
-// // ===========================================
+// ===========================================
+// PLATFORM WALLET ROUTES
+// ===========================================
 
-// /**
-//  * Get wallet information
-//  * GET /api/multisig/wallet/:publicKey
-//  */
-// router.get(
-//   "/wallet/:publicKey",
-//   authenticate,
-//   requireAdmin,
-//   validatePublicKey,
-//   getWalletInfo
-// );
+/**
+ * Create platform wallets (Super Admin only)
+ * POST /api/multisig/platform/wallets
+ */
+router.post(
+  "/platform/wallets",
+  authenticate,
+  requireSuperAdmin,
+  validateCreatePlatformWallet,
+  createPlatformWallets
+);
 
-// // ===========================================
-// // MULTISIG TRANSACTION ROUTES
-// // ===========================================
+// ===========================================
+// PROPERTY WALLET ROUTES
+// ===========================================
 
-// /**
-//  * Propose a multisig transaction
-//  * POST /api/multisig/transactions/propose
-//  */
+/**
+ * Create property-specific wallets (Admin only)
+ * POST /api/multisig/property/:propertyId/wallets
+ */
+router.post(
+  "/property/:propertyId/wallets",
+  authenticate,
+  requireAdmin,
+  validatePropertyId,
+  createPropertyWallets
+);
+
+// ===========================================
+// UTILITY ROUTES
+// ===========================================
+
+/**
+ * Get wallet information
+ * GET /api/multisig/wallet/:publicKey
+ */
+router.get(
+  "/wallet/:publicKey",
+  authenticate,
+  requireAdmin,
+  validatePublicKey,
+  getWalletInfo
+);
+
+// ===========================================
+// MULTISIG TRANSACTION ROUTES
+// ===========================================
+
+/**
+ * Propose a multisig transaction
+ * POST /api/multisig/transactions/propose
+ */
 // router.post(
 //   "/transactions/propose",
 //   authenticate,
@@ -444,10 +444,10 @@
 //   }
 // );
 
-// /**
-//  * Sign a multisig transaction
-//  * POST /api/multisig/transactions/:transactionId/sign
-//  */
+/**
+ * Sign a multisig transaction
+ * POST /api/multisig/transactions/:transactionId/sign
+ */
 // router.post(
 //   "/transactions/:transactionId/sign",
 //   authenticate,
@@ -465,10 +465,10 @@
 //   }
 // );
 
-// /**
-//  * Execute a multisig transaction
-//  * POST /api/multisig/transactions/:transactionId/execute
-//  */
+/**
+ * Execute a multisig transaction
+ * POST /api/multisig/transactions/:transactionId/execute
+ */
 // router.post(
 //   "/transactions/:transactionId/execute",
 //   authenticate,
@@ -485,10 +485,10 @@
 //   }
 // );
 
-// /**
-//  * Get pending transactions for user's wallets
-//  * GET /api/multisig/transactions/pending
-//  */
+/**
+ * Get pending transactions for user's wallets
+ * GET /api/multisig/transactions/pending
+ */
 // router.get("/transactions/pending", authenticate, async (req, res) => {
 //   try {
 //     const { GetPendingTransactions } = await import(
@@ -500,10 +500,10 @@
 //   }
 // });
 
-// /**
-//  * Get transaction history for a specific wallet
-//  * GET /api/multisig/transactions/history/:walletPublicKey
-//  */
+/**
+ * Get transaction history for a specific wallet
+ * GET /api/multisig/transactions/history/:walletPublicKey
+ */
 // router.get(
 //   "/transactions/history/:walletPublicKey",
 //   authenticate,
@@ -520,10 +520,10 @@
 //   }
 // );
 
-// /**
-//  * Get transaction details
-//  * GET /api/multisig/transactions/:transactionId
-//  */
+/**
+ * Get transaction details
+ * GET /api/multisig/transactions/:transactionId
+ */
 // router.get("/transactions/:transactionId", authenticate, async (req, res) => {
 //   try {
 //     const { getMultiSigTransactionDetails } = await import(
@@ -535,14 +535,14 @@
 //   }
 // });
 
-// // ===========================================
-// // GOVERNANCE ROUTES
-// // ===========================================
+// ===========================================
+// GOVERNANCE ROUTES
+// ===========================================
 
-// /**
-//  * Create governance proposal for property
-//  * POST /api/multisig/governance/proposals
-//  */
+/**
+ * Create governance proposal for property
+ * POST /api/multisig/governance/proposals
+ */
 // router.post(
 //   "/governance/proposals",
 //   authenticate,
@@ -559,10 +559,10 @@
 //   }
 // );
 
-// /**
-//  * Vote on governance proposal
-//  * POST /api/multisig/governance/proposals/:proposalId/vote
-//  */
+/**
+ * Vote on governance proposal
+ * POST /api/multisig/governance/proposals/:proposalId/vote
+ */
 // router.post(
 //   "/governance/proposals/:proposalId/vote",
 //   authenticate,
@@ -579,10 +579,10 @@
 //   }
 // );
 
-// /**
-//  * Get governance proposals for a property
-//  * GET /api/multisig/governance/proposals/:propertyId
-//  */
+/**
+ * Get governance proposals for a property
+ * GET /api/multisig/governance/proposals/:propertyId
+ */
 // router.get(
 //   "/governance/proposals/:propertyId",
 //   authenticate,
@@ -599,14 +599,14 @@
 //   }
 // );
 
-// // ===========================================
-// // REVENUE DISTRIBUTION ROUTES
-// // ===========================================
+// ===========================================
+// REVENUE DISTRIBUTION ROUTES
+// ===========================================
 
-// /**
-//  * Create revenue distribution (Admin only)
-//  * POST /api/multisig/revenue/distribute
-//  */
+/**
+ * Create revenue distribution (Admin only)
+ * POST /api/multisig/revenue/distribute
+ */
 // router.post(
 //   "/revenue/distribute",
 //   authenticate,
@@ -623,10 +623,10 @@
 //   }
 // );
 
-// /**
-//  * Get revenue distribution history for property
-//  * GET /api/multisig/revenue/history/:propertyId
-//  */
+/**
+ * Get revenue distribution history for property
+ * GET /api/multisig/revenue/history/:propertyId
+ */
 // router.get(
 //   "/revenue/history/:propertyId",
 //   authenticate,
@@ -643,14 +643,14 @@
 //   }
 // );
 
-// // ===========================================
-// // SIGNER MANAGEMENT ROUTES
-// // ===========================================
+// ===========================================
+// SIGNER MANAGEMENT ROUTES
+// ===========================================
 
-// /**
-//  * Add signer to multisig wallet (Admin only)
-//  * POST /api/multisig/wallets/signers
-//  */
+/**
+ * Add signer to multisig wallet (Admin only)
+ * POST /api/multisig/wallets/signers
+ */
 // router.post(
 //   "/wallets/signers",
 //   authenticate,
@@ -665,10 +665,10 @@
 //   }
 // );
 
-// /**
-//  * Remove signer from multisig wallet (Admin only)
-//  * DELETE /api/multisig/wallets/signers/:signerId
-//  */
+/**
+ * Remove signer from multisig wallet (Admin only)
+ * DELETE /api/multisig/wallets/signers/:signerId
+ */
 // router.delete(
 //   "/wallets/signers/:signerId",
 //   authenticate,
@@ -685,10 +685,10 @@
 //   }
 // );
 
-// /**
-//  * Get signers for a wallet
-//  * GET /api/multisig/wallets/:walletId/signers
-//  */
+/**
+ * Get signers for a wallet
+ * GET /api/multisig/wallets/:walletId/signers
+ */
 // router.get(
 //   "/wallets/:walletId/signers",
 //   authenticate,
@@ -705,14 +705,14 @@
 //   }
 // );
 
-// // ===========================================
-// // ADMIN MANAGEMENT ROUTES
-// // ===========================================
+// ===========================================
+// ADMIN MANAGEMENT ROUTES
+// ===========================================
 
-// /**
-//  * Get all platform wallets (Super Admin only)
-//  * GET /api/multisig/platform/wallets
-//  */
+/**
+ * Get all platform wallets (Super Admin only)
+ * GET /api/multisig/platform/wallets
+ */
 // router.get(
 //   "/platform/wallets",
 //   authenticate,
@@ -729,10 +729,10 @@
 //   }
 // );
 
-// /**
-//  * Get all property wallets for a property (Admin only)
-//  * GET /api/multisig/property/:propertyId/wallets
-//  */
+/**
+ * Get all property wallets for a property (Admin only)
+ * GET /api/multisig/property/:propertyId/wallets
+ */
 // router.get(
 //   "/property/:propertyId/wallets",
 //   authenticate,
@@ -750,54 +750,54 @@
 //   }
 // );
 
-// /**
-//  * Emergency wallet operations (Super Admin only)
-//  * POST /api/multisig/emergency/:walletId/freeze
-//  */
-// // router.post(
-// //   "/emergency/:walletId/freeze",
-// //   authenticate,
-// //   requireSuperAdmin,
-// //   async (req, res) => {
-// //     try {
-// //       const { emergencyFreezeWallet } = await import(
-// //         "../controllers/multisigController"
-// //       );
-// //       await emergencyFreezeWallet(req, res);
-// //     } catch (error) {
-// //       res.status(500).json({ error: "Failed to load multisig controller" });
-// //     }
-// //   }
-// // );
+/**
+ * Emergency wallet operations (Super Admin only)
+ * POST /api/multisig/emergency/:walletId/freeze
+ */
+// router.post(
+//   "/emergency/:walletId/freeze",
+//   authenticate,
+//   requireSuperAdmin,
+//   async (req, res) => {
+//     try {
+//       const { emergencyFreezeWallet } = await import(
+//         "../controllers/multisigController"
+//       );
+//       await emergencyFreezeWallet(req, res);
+//     } catch (error) {
+//       res.status(500).json({ error: "Failed to load multisig controller" });
+//     }
+//   }
+// );
 
-// /**
-//  * Emergency wallet operations (Super Admin only)
-//  * POST /api/multisig/emergency/:walletId/unfreeze
-//  */
-// // router.post(
-// //   "/emergency/:walletId/unfreeze",
-// //   authenticate,
-// //   requireSuperAdmin,
-// //   async (req, res) => {
-// //     try {
-// //       const { emergencyUnfreezeWallet } = await import(
-// //         "../controllers/multisigController"
-// //       );
-// //       await emergencyUnfreezeWallet(req, res);
-// //     } catch (error) {
-// //       res.status(500).json({ error: "Failed to load multisig controller" });
-// //     }
-// //   }
-// // );
+/**
+ * Emergency wallet operations (Super Admin only)
+ * POST /api/multisig/emergency/:walletId/unfreeze
+ */
+// router.post(
+//   "/emergency/:walletId/unfreeze",
+//   authenticate,
+//   requireSuperAdmin,
+//   async (req, res) => {
+//     try {
+//       const { emergencyUnfreezeWallet } = await import(
+//         "../controllers/multisigController"
+//       );
+//       await emergencyUnfreezeWallet(req, res);
+//     } catch (error) {
+//       res.status(500).json({ error: "Failed to load multisig controller" });
+//     }
+//   }
+// );
 
-// // ===========================================
-// // MONITORING AND ANALYTICS ROUTES
-// // ===========================================
+// ===========================================
+// MONITORING AND ANALYTICS ROUTES
+// ===========================================
 
-// /**
-//  * Get platform-wide wallet statistics (Admin only)
-//  * GET /api/multisig/stats
-//  */
+/**
+ * Get platform-wide wallet statistics (Admin only)
+ * GET /api/multisig/stats
+ */
 // router.get("/stats", authenticate, requireAdmin, async (req, res) => {
 //   try {
 //     const { getPlatformWalletStats } = await import(
@@ -809,34 +809,34 @@
 //   }
 // });
 
-// /**
-//  * Get wallet activity feed (Admin only)
-//  * GET /api/multisig/activity
-//  */
-// // router.get("/activity", authenticate, requireAdmin, async (req, res) => {
-// //   try {
-// //     const { getWalletActivityFeed } = await import(
-// //       "../controllers/multisigController"
-// //     );
-// //     await getWalletActivityFeed(req, res);
-// //   } catch (error) {
-// //     res.status(500).json({ error: "Failed to load multisig controller" });
-// //   }
-// // });
+/**
+ * Get wallet activity feed (Admin only)
+ * GET /api/multisig/activity
+ */
+// router.get("/activity", authenticate, requireAdmin, async (req, res) => {
+//   try {
+//     const { getWalletActivityFeed } = await import(
+//       "../controllers/multisigController"
+//     );
+//     await getWalletActivityFeed(req, res);
+//   } catch (error) {
+//     res.status(500).json({ error: "Failed to load multisig controller" });
+//   }
+// });
 
-// /**
-//  * Health check for all platform wallets (Super Admin only)
-//  * GET /api/multisig/health
-//  */
-// // router.get("/health", authenticate, requireSuperAdmin, async (req, res) => {
-// //   try {
-// //     const { performWalletHealthCheck } = await import(
-// //       "../controllers/multisigController"
-// //     );
-// //     await performWalletHealthCheck(req, res);
-// //   } catch (error) {
-// //     res.status(500).json({ error: "Failed to load multisig controller" });
-// //   }
-// // });
+/**
+ * Health check for all platform wallets (Super Admin only)
+ * GET /api/multisig/health
+ */
+// router.get("/health", authenticate, requireSuperAdmin, async (req, res) => {
+//   try {
+//     const { performWalletHealthCheck } = await import(
+//       "../controllers/multisigController"
+//     );
+//     await performWalletHealthCheck(req, res);
+//   } catch (error) {
+//     res.status(500).json({ error: "Failed to load multisig controller" });
+//   }
+// });
 
-// export default router;
+export default router;

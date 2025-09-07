@@ -3,7 +3,7 @@ dotenv.config();
 
 export const NODE_ENV = process.env.NODE_ENV;
 export const PORT = process.env.PORT;
-
+export const PING_URL = process.env.PING_URL as string;
 // Database Configuration
 export const DB_HOST = process.env.DB_HOST;
 export const DB_NAME = process.env.DB_NAME;
