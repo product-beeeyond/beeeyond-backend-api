@@ -365,7 +365,7 @@ export const ResetPassword = async (req: Request, res: Response) => {
     }
 
     // Update user password
-    await user.update({ password: newPassword });
+    await user.update({ password: newPassword }); //hashing takes place beforeCreate
 
     // Remove password reset OTP from Redis
     await redisClient.del(resetKey);
