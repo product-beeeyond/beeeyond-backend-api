@@ -1,8 +1,8 @@
 // /* eslint-disable @typescript-eslint/no-explicit-any */
-// import { Response } from 'express';
+import { Response } from 'express';
 // import bcrypt from 'bcryptjs';
-// import { AuthRequest, UserRole } from '../middleware/auth';
-// import User from '../models/User';
+import { AuthRequest, UserRole } from '../middleware/auth';
+import User from '../models/User';
 // // import { generateToken } from '../utils/jwt';
 // // import { sendWelcomeEmail } from '../utils/email';
 // import { BCRYPT_ROUNDS } from '../config';
@@ -13,7 +13,9 @@
 // import RecoveryRequest from '../models/RecoveryRequest';
 // import MultiSigSigner from '../models/MultiSigSigner';
 // import { executeRecoveryProcess } from '../jobs/recoveryJobs';
+
 // // Create admin user - Super Admin only
+
 // export const createAdmin = async (req: AuthRequest, res: Response) => {
 //   try {
 //     const { email, firstName, lastName, password } = req.body;
@@ -169,49 +171,51 @@
 // };
 
 // // Promote regular user to admin - Super Admin only
-// export const promoteToAdmin = async (req: AuthRequest, res: Response) => {
-//   try {
-//     const { userId } = req.params;
 
-//     const user = await User.findOne({
-//       where: {
-//         id: userId,
-//         role: UserRole.USER
-//       }
-//     });
 
-//     if (!user) {
-//       return res.status(404).json({ error: 'User not found or already an admin' });
-//     }
+export const promoteToAdmin = async (req: AuthRequest, res: Response) => {
+  try {
+    const { userId } = req.params;
 
-//     // Promote user to admin
-//     await user.update({
-//       role: UserRole.ADMIN,
-//       kycStatus: 'verified' // Admins should be KYC verified
-//     });
+    const user = await User.findOne({
+      where: {
+        id: userId,
+        role: UserRole.USER
+      }
+    });
 
-//     const { ...promotedUserData } = user.toJSON();
+    if (!user) {
+      return res.status(404).json({ error: 'User not found or already an admin' });
+    }
 
-//     // Send promotion notification email
-//     try {
-//       await sendPromotionEmail({
-//         email: user.email,
-//         firstName: user.firstName!,
-//         newRole: 'Admin'
-//       });
-//     } catch (emailError) {
-//       console.error('Failed to send promotion email:', emailError);
-//     }
+    // Promote user to admin
+    await user.update({
+      role: UserRole.ADMIN,
+      kycStatus: 'verified' // Admins should be KYC verified
+    });
 
-//     res.json({
-//       message: 'User promoted to admin successfully',
-//       admin: promotedUserData
-//     });
-//   } catch (error) {
-//     console.error('Promote user error:', error);
-//     res.status(500).json({ error: 'Internal server error' });
-//   }
-// };
+    const { ...promotedUserData } = user.toJSON();
+
+    // Send promotion notification email
+    // try {
+    //   await sendPromotionEmail({
+    //     email: user.email,
+    //     firstName: user.firstName!,
+    //     newRole: 'Admin'
+    //   });
+    // } catch (emailError) {
+    //   console.error('Failed to send promotion email:', emailError);
+    // }
+
+    res.json({
+      message: 'User promoted to admin successfully',
+      admin: promotedUserData
+    });
+  } catch (error) {
+    console.error('Promote user error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
 
 // // Demote admin to regular user - Super Admin only
 // export const demoteAdmin = async (req: AuthRequest, res: Response) => {

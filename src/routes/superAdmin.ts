@@ -3,17 +3,17 @@ import express from 'express';
 //   authenticate,
 //   requireSuperAdmin
 // } from '../middleware/auth';
-// import {
+import {
 //   createAdmin,
 //   getAllAdmins,
 //   updateAdmin,
 //   deactivateAdmin,
-//   promoteToAdmin,
+  promoteToAdmin,
 //   demoteAdmin,
 //   // resetAdminPassword
-// } from '../controllers/adminController';
-// import { body, param } from 'express-validator';
-// import { handleValidationErrors } from '../middleware/validation';
+} from '../controllers/adminController';
+import {  param } from 'express-validator';
+import { handleValidationErrors } from '../middleware/validation';
 
 const router = express.Router();
 
@@ -38,10 +38,10 @@ const router = express.Router();
 // //   handleValidationErrors
 // // ];
 
-// const validateUserId = [
-//   param('userId').isUUID().withMessage('Valid user ID is required'),
-//   handleValidationErrors
-// ];
+const validateUserId = [
+  param('userId').isUUID().withMessage('Valid user ID is required'),
+  handleValidationErrors
+];
 
 // const validateAdminId = [
 //   param('adminId').isUUID().withMessage('Valid admin ID is required'),
@@ -57,7 +57,7 @@ const router = express.Router();
 // router.get('/list', getAllAdmins);
 // router.put('/:adminId', validateAdminId, validateUpdateAdmin, updateAdmin);
 // router.patch('/:adminId/deactivate', validateAdminId, deactivateAdmin);
-// router.patch('/promote/:userId', validateUserId, promoteToAdmin);
+router.patch('/promote/:userId', validateUserId, promoteToAdmin);
 // router.patch('/:adminId/demote', validateAdminId, demoteAdmin);
 
 // // Reset admin password

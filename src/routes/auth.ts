@@ -11,8 +11,8 @@ import { SignUp, Login, RefreshToken, Logout, VerifyOTP, ResendOTP} from "../con
 const router = Router();
 
 router.post('/register', validate(registerSchema), SignUp);
-router.post('/verify-otp', authenticate, VerifyOTP);
-router.post('/resend-otp', authenticate, ResendOTP);
+router.post('/verify-otp', VerifyOTP);
+router.post('/resend-otp', ResendOTP);
 router.post('/login', validate(loginSchema), Login);
 router.post('/refresh', RefreshToken);
 router.post('/logout', authenticate, Logout);
