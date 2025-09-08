@@ -24,6 +24,8 @@ import {
   STELLAR_TREASURY_SECRET,
   MULTISIG_CONFIG,
 } from "../config";
+import { sequelize } from "../config/database";
+// import sequelize from 'sequelize/types/sequelize';
 
 // Reserve calculation constants
 const BASE_RESERVE = 0.5; // XLM per account
@@ -461,7 +463,186 @@ class StellarService {
   }
 
   /**
-   * Create platform treasury wallet with proper reserves (2-of-3 multisig)
+   * Create platform treasury wallet with proper reserves (2-of-3 multisig) (__deprecated__)
+   */
+  // async createPlatformTreasuryWallet(params: PlatformWalletParams) {
+  //   try {
+  //     const walletKeypair = Keypair.random();
+  //     const platformKey2 = Keypair.random();
+  //     const platformKey3 = Keypair.random();
+
+  //     // Calculate required balance: Base + 3 additional signers
+  //     const requiredBalance = this.calculateMinimumBalance({
+  //       additionalSigners: 3,
+  //       trustlines: 0,
+  //     });
+
+  //     // Fund account
+  //     if (STELLAR_NETWORK === "testnet") {
+  //       await this.server.friendbot(walletKeypair.publicKey()).call();
+  //       await this.sleep(2000);
+
+  //       // Ensure sufficient balance
+  //       const account = await this.server.loadAccount(
+  //         walletKeypair.publicKey()
+  //       );
+  //       const xlmBalance = account.balances.find(
+  //         (b) => b.asset_type === "native"
+  //       );
+  //       const currentBalance = parseFloat(xlmBalance?.balance || "0");
+
+  //       if (currentBalance < parseFloat(requiredBalance)) {
+  //         const additionalFunding = (
+  //           parseFloat(requiredBalance) -
+  //           currentBalance +
+  //           1
+  //         ).toFixed(7);
+  //         await this.fundWalletFromTreasury(
+  //           walletKeypair.publicKey(),
+  //           additionalFunding
+  //         );
+  //       }
+  //     } else {
+  //       await this.fundWalletFromTreasury(
+  //         walletKeypair.publicKey(),
+  //         requiredBalance
+  //       );
+  //     }
+
+  //     const account = await this.server.loadAccount(walletKeypair.publicKey());
+
+  //     // Create 2-of-3 multisig for treasury (higher security)
+  //     const transaction = new TransactionBuilder(account, {
+  //       fee: BASE_FEE,
+  //       networkPassphrase: this.network,
+  //     })
+  //       .addOperation(
+  //         Operation.setOptions({
+  //           signer: {
+  //             ed25519PublicKey: this.platformKeypair.publicKey(),
+  //             weight: MULTISIG_CONFIG.PLATFORM_TREASURY.PRIMARY_WEIGHT, // 2
+  //           },
+  //         })
+  //       )
+  //       .addOperation(
+  //         Operation.setOptions({
+  //           signer: {
+  //             ed25519PublicKey: platformKey2.publicKey(),
+  //             weight: MULTISIG_CONFIG.PLATFORM_TREASURY.SECONDARY_WEIGHT, // 1
+  //           },
+  //         })
+  //       )
+  //       .addOperation(
+  //         Operation.setOptions({
+  //           signer: {
+  //             ed25519PublicKey: platformKey3.publicKey(),
+  //             weight: MULTISIG_CONFIG.PLATFORM_TREASURY.RECOVERY_WEIGHT, // 1
+  //           },
+  //         })
+  //       )
+  //       .addOperation(
+  //         Operation.setOptions({
+  //           lowThreshold: MULTISIG_CONFIG.PLATFORM_TREASURY.LOW_THRESHOLD, // 2 - 2-of-3 for payments
+  //           medThreshold: MULTISIG_CONFIG.PLATFORM_TREASURY.MEDIUM_THRESHOLD, // 3 - 3-of-3 for account management
+  //           highThreshold: MULTISIG_CONFIG.PLATFORM_TREASURY.HIGH_THRESHOLD, // 3 - 3-of-3 for critical ops
+  //           masterWeight: MULTISIG_CONFIG.PLATFORM_TREASURY.MASTER_WEIGHT, // 0
+  //         })
+  //       )
+  //       .setTimeout(180)
+  //       .build();
+
+  //     transaction.sign(walletKeypair);
+
+  //     // Submit transaction with fee bump sponsorship
+  //     const result = await this.submitTransactionWithFeeBump(
+  //       transaction,
+  //       walletKeypair
+  //     );
+
+  //     const multiSigWallet = await MultiSigWallet.create({
+  //       stellarPublicKey: walletKeypair.publicKey(),
+  //       walletType: "platform_treasury",
+  //       lowThreshold: MULTISIG_CONFIG.PLATFORM_TREASURY.LOW_THRESHOLD,
+  //       mediumThreshold: MULTISIG_CONFIG.PLATFORM_TREASURY.MEDIUM_THRESHOLD,
+  //       highThreshold: MULTISIG_CONFIG.PLATFORM_TREASURY.HIGH_THRESHOLD,
+  //       masterWeight: MULTISIG_CONFIG.PLATFORM_TREASURY.MASTER_WEIGHT,
+  //       status: "active",
+  //       createdTxHash: result.hash,
+  //       metadata: {
+  //         description: params.description,
+  //         createdBy: params.createdBy,
+  //         initialBalance: requiredBalance,
+  //         createdAt: new Date().toISOString(),
+  //       },
+  //     });
+
+  //     // Store platform signers
+  //     await Promise.all([
+  //       MultiSigSigner.create({
+  //         multiSigWalletId: multiSigWallet.id,
+  //         publicKey: this.platformKeypair.publicKey(),
+  //         weight: MULTISIG_CONFIG.PLATFORM_TREASURY.PRIMARY_WEIGHT, // 2
+  //         role: "platform_primary",
+  //         status: "active",
+  //       }),
+  //       MultiSigSigner.create({
+  //         multiSigWalletId: multiSigWallet.id,
+  //         publicKey: platformKey2.publicKey(),
+  //         weight: MULTISIG_CONFIG.PLATFORM_TREASURY.SECONDARY_WEIGHT, // 1
+  //         role: "platform_secondary",
+  //         status: "active",
+  //         encryptedPrivateKey: encrypt(
+  //           platformKey2.secret(),
+  //           "platform_treasury_key_2"
+  //         ),
+  //       }),
+  //       MultiSigSigner.create({
+  //         multiSigWalletId: multiSigWallet.id,
+  //         publicKey: platformKey3.publicKey(),
+  //         weight: MULTISIG_CONFIG.PLATFORM_TREASURY.RECOVERY_WEIGHT, // 1
+  //         role: "platform_tertiary",
+  //         status: "active",
+  //         encryptedPrivateKey: encrypt(
+  //           platformKey3.secret(),
+  //           "platform_treasury_key_3"
+  //         ),
+  //       }),
+  //     ]);
+
+  //     logger.info(
+  //       `Platform treasury wallet created: ${walletKeypair.publicKey()} with ${requiredBalance} XLM`
+  //     );
+
+  //     return {
+  //       publicKey: walletKeypair.publicKey(),
+  //       walletId: multiSigWallet.id,
+  //       initialBalance: requiredBalance,
+  //       signers: [
+  //         {
+  //           publicKey: this.platformKeypair.publicKey(),
+  //           role: "platform_primary",
+  //         },
+  //         { publicKey: platformKey2.publicKey(), role: "platform_secondary" },
+  //         { publicKey: platformKey3.publicKey(), role: "platform_tertiary" },
+  //       ],
+  //       thresholds: {
+  //         low: MULTISIG_CONFIG.PLATFORM_TREASURY.LOW_THRESHOLD,
+  //         medium: MULTISIG_CONFIG.PLATFORM_TREASURY.MEDIUM_THRESHOLD,
+  //         high: MULTISIG_CONFIG.PLATFORM_TREASURY.HIGH_THRESHOLD,
+  //       },
+  //     };
+  //   } catch (error) {
+  //     logger.error("Error creating platform treasury wallet:", error);
+  //     throw error;
+  //   }
+  // }
+  // ===========================================
+  // PHASE 1: INITIAL TREASURY WALLET CREATION
+  // ===========================================
+
+  /**
+   * Phase 1: Create platform treasury wallet and store in DB with "awaiting_funding" status
+   * This phase creates the wallet structure without multisig setup to avoid circular dependency
    */
   async createPlatformTreasuryWallet(params: PlatformWalletParams) {
     try {
@@ -469,18 +650,18 @@ class StellarService {
       const platformKey2 = Keypair.random();
       const platformKey3 = Keypair.random();
 
-      // Calculate required balance: Base + 3 additional signers
       const requiredBalance = this.calculateMinimumBalance({
         additionalSigners: 3,
         trustlines: 0,
       });
 
-      // Fund account
+      let fundingRequired = false;
+
       if (STELLAR_NETWORK === "testnet") {
+        // Fund with friendbot on testnet
         await this.server.friendbot(walletKeypair.publicKey()).call();
         await this.sleep(2000);
 
-        // Ensure sufficient balance
         const account = await this.server.loadAccount(
           walletKeypair.publicKey()
         );
@@ -495,68 +676,22 @@ class StellarService {
             currentBalance +
             1
           ).toFixed(7);
-          await this.fundWalletFromTreasury(
-            walletKeypair.publicKey(),
-            additionalFunding
-          );
+          await this.server.friendbot(walletKeypair.publicKey()).call();
+          await this.sleep(2000);
+          // await this.fundWalletFromTreasury(
+          //   walletKeypair.publicKey(),
+          //   additionalFunding
+          // );
         }
       } else {
-        await this.fundWalletFromTreasury(
-          walletKeypair.publicKey(),
-          requiredBalance
+        // On mainnet, wallet must be funded manually before finalization
+        fundingRequired = true;
+        logger.warn(
+          `Treasury wallet ${walletKeypair.publicKey()} requires at least ${requiredBalance} XLM funding before finalization.`
         );
       }
 
-      const account = await this.server.loadAccount(walletKeypair.publicKey());
-
-      // Create 2-of-3 multisig for treasury (higher security)
-      const transaction = new TransactionBuilder(account, {
-        fee: BASE_FEE,
-        networkPassphrase: this.network,
-      })
-        .addOperation(
-          Operation.setOptions({
-            signer: {
-              ed25519PublicKey: this.platformKeypair.publicKey(),
-              weight: MULTISIG_CONFIG.PLATFORM_TREASURY.PRIMARY_WEIGHT, // 2
-            },
-          })
-        )
-        .addOperation(
-          Operation.setOptions({
-            signer: {
-              ed25519PublicKey: platformKey2.publicKey(),
-              weight: MULTISIG_CONFIG.PLATFORM_TREASURY.SECONDARY_WEIGHT, // 1
-            },
-          })
-        )
-        .addOperation(
-          Operation.setOptions({
-            signer: {
-              ed25519PublicKey: platformKey3.publicKey(),
-              weight: MULTISIG_CONFIG.PLATFORM_TREASURY.RECOVERY_WEIGHT, // 1
-            },
-          })
-        )
-        .addOperation(
-          Operation.setOptions({
-            lowThreshold: MULTISIG_CONFIG.PLATFORM_TREASURY.LOW_THRESHOLD, // 2 - 2-of-3 for payments
-            medThreshold: MULTISIG_CONFIG.PLATFORM_TREASURY.MEDIUM_THRESHOLD, // 3 - 3-of-3 for account management
-            highThreshold: MULTISIG_CONFIG.PLATFORM_TREASURY.HIGH_THRESHOLD, // 3 - 3-of-3 for critical ops
-            masterWeight: MULTISIG_CONFIG.PLATFORM_TREASURY.MASTER_WEIGHT, // 0
-          })
-        )
-        .setTimeout(180)
-        .build();
-
-      transaction.sign(walletKeypair);
-
-      // Submit transaction with fee bump sponsorship
-      const result = await this.submitTransactionWithFeeBump(
-        transaction,
-        walletKeypair
-      );
-
+      // Create DB record immediately with pending status
       const multiSigWallet = await MultiSigWallet.create({
         stellarPublicKey: walletKeypair.publicKey(),
         walletType: "platform_treasury",
@@ -564,31 +699,31 @@ class StellarService {
         mediumThreshold: MULTISIG_CONFIG.PLATFORM_TREASURY.MEDIUM_THRESHOLD,
         highThreshold: MULTISIG_CONFIG.PLATFORM_TREASURY.HIGH_THRESHOLD,
         masterWeight: MULTISIG_CONFIG.PLATFORM_TREASURY.MASTER_WEIGHT,
-        status: "active",
-        createdTxHash: result.hash,
+        status: fundingRequired ? "awaiting_funding" : "awaiting_finalization",
         metadata: {
           description: params.description,
           createdBy: params.createdBy,
           initialBalance: requiredBalance,
           createdAt: new Date().toISOString(),
+          phase: "initial_creation",
         },
       });
 
-      // Store platform signers
+      // Store platform signers in DB (private keys encrypted for later finalization)
       await Promise.all([
         MultiSigSigner.create({
           multiSigWalletId: multiSigWallet.id,
           publicKey: this.platformKeypair.publicKey(),
-          weight: MULTISIG_CONFIG.PLATFORM_TREASURY.PRIMARY_WEIGHT, // 2
+          weight: MULTISIG_CONFIG.PLATFORM_TREASURY.PRIMARY_WEIGHT,
           role: "platform_primary",
-          status: "active",
+          status: "pending",
         }),
         MultiSigSigner.create({
           multiSigWalletId: multiSigWallet.id,
           publicKey: platformKey2.publicKey(),
-          weight: MULTISIG_CONFIG.PLATFORM_TREASURY.SECONDARY_WEIGHT, // 1
+          weight: MULTISIG_CONFIG.PLATFORM_TREASURY.SECONDARY_WEIGHT,
           role: "platform_secondary",
-          status: "active",
+          status: "pending",
           encryptedPrivateKey: encrypt(
             platformKey2.secret(),
             "platform_treasury_key_2"
@@ -597,9 +732,9 @@ class StellarService {
         MultiSigSigner.create({
           multiSigWalletId: multiSigWallet.id,
           publicKey: platformKey3.publicKey(),
-          weight: MULTISIG_CONFIG.PLATFORM_TREASURY.RECOVERY_WEIGHT, // 1
+          weight: MULTISIG_CONFIG.PLATFORM_TREASURY.RECOVERY_WEIGHT,
           role: "platform_tertiary",
-          status: "active",
+          status: "pending",
           encryptedPrivateKey: encrypt(
             platformKey3.secret(),
             "platform_treasury_key_3"
@@ -607,30 +742,264 @@ class StellarService {
         }),
       ]);
 
+      // Store the master keypair securely for finalization
+      // In production, this should be stored in a secure key management system
+      const encryptedMasterKey = encrypt(
+        walletKeypair.secret(),
+        `treasury_master_${multiSigWallet.id}`
+      );
+
+      // Update wallet with encrypted master key for finalization
+      await multiSigWallet.update({
+        metadata: {
+          ...multiSigWallet.metadata,
+          encryptedMasterKey,
+        },
+      });
+
       logger.info(
-        `Platform treasury wallet created: ${walletKeypair.publicKey()} with ${requiredBalance} XLM`
+        `Platform treasury wallet created (Phase 1): ${walletKeypair.publicKey()}`
       );
 
       return {
         publicKey: walletKeypair.publicKey(),
         walletId: multiSigWallet.id,
-        initialBalance: requiredBalance,
-        signers: [
-          {
-            publicKey: this.platformKeypair.publicKey(),
-            role: "platform_primary",
-          },
-          { publicKey: platformKey2.publicKey(), role: "platform_secondary" },
-          { publicKey: platformKey3.publicKey(), role: "platform_tertiary" },
-        ],
-        thresholds: {
-          low: MULTISIG_CONFIG.PLATFORM_TREASURY.LOW_THRESHOLD,
-          medium: MULTISIG_CONFIG.PLATFORM_TREASURY.MEDIUM_THRESHOLD,
-          high: MULTISIG_CONFIG.PLATFORM_TREASURY.HIGH_THRESHOLD,
-        },
+        requiredBalance,
+        fundingRequired,
+        status: multiSigWallet.status,
+        nextSteps: fundingRequired
+          ? `Fund wallet with ${requiredBalance} XLM then call finalizeTreasuryWalletSetup()`
+          : "Call finalizeTreasuryWalletSetup() to complete multisig setup",
       };
     } catch (error) {
-      logger.error("Error creating platform treasury wallet:", error);
+      logger.error("Error creating platform treasury wallet (Phase 1):", error);
+      throw error;
+    }
+  }
+
+  // ===========================================
+  // PHASE 2: FINALIZE MULTISIG SETUP
+  // ===========================================
+
+  /**
+   * Phase 2: Finalize treasury wallet setup with multisig configuration
+   * Called after wallet has been manually funded (on mainnet) or automatically funded (testnet)
+   */
+  async finalizeTreasuryWalletSetup(publicKey: string) {
+    try {
+      // Find wallet in DB
+      const wallet = await MultiSigWallet.findOne({
+        where: {
+          stellarPublicKey: publicKey,
+          walletType: "platform_treasury",
+          status: ["awaiting_funding", "awaiting_finalization"],
+        },
+        include: [
+          {
+            model: MultiSigSigner,
+            as: "signers",
+            where: { status: "pending" },
+          },
+        ],
+      });
+
+      if (!wallet) {
+        throw new Error("Treasury wallet not found or already finalized");
+      }
+
+      // Verify wallet is funded
+      const account = await this.server.loadAccount(publicKey);
+      const xlmBalance = account.balances.find(
+        (b) => b.asset_type === "native"
+      );
+      const currentBalance = parseFloat(xlmBalance?.balance || "0");
+      const requiredBalance = parseFloat(
+        wallet.metadata?.initialBalance || "0"
+      );
+
+      if (currentBalance < requiredBalance) {
+        throw new Error(
+          `Insufficient balance. Current: ${currentBalance} XLM, Required: ${requiredBalance} XLM`
+        );
+      }
+
+      // Decrypt master key for transaction signing
+      const encryptedMasterKey = wallet.metadata?.encryptedMasterKey;
+      if (!encryptedMasterKey) {
+        throw new Error("Master key not found for finalization");
+      }
+
+      const masterSecret = decrypt(
+        encryptedMasterKey,
+        `treasury_master_${wallet.id}`
+      );
+      const walletKeypair = Keypair.fromSecret(masterSecret);
+
+      // Get signer public keys from DB
+      const signers = wallet.signers || [];
+      const secondarySigner = signers.find(
+        (s) => s.role === "platform_secondary"
+      );
+      const tertiarySigner = signers.find(
+        (s) => s.role === "platform_tertiary"
+      );
+
+      if (!secondarySigner || !tertiarySigner) {
+        throw new Error("Required signers not found in database");
+      }
+
+      // Build multisig setup transaction
+      const transaction = new TransactionBuilder(account, {
+        fee: BASE_FEE,
+        networkPassphrase: this.network,
+      })
+        .addOperation(
+          Operation.setOptions({
+            signer: {
+              ed25519PublicKey: this.platformKeypair.publicKey(),
+              weight: MULTISIG_CONFIG.PLATFORM_TREASURY.PRIMARY_WEIGHT,
+            },
+          })
+        )
+        .addOperation(
+          Operation.setOptions({
+            signer: {
+              ed25519PublicKey: secondarySigner.publicKey,
+              weight: MULTISIG_CONFIG.PLATFORM_TREASURY.SECONDARY_WEIGHT,
+            },
+          })
+        )
+        .addOperation(
+          Operation.setOptions({
+            signer: {
+              ed25519PublicKey: tertiarySigner.publicKey,
+              weight: MULTISIG_CONFIG.PLATFORM_TREASURY.RECOVERY_WEIGHT,
+            },
+          })
+        )
+        .addOperation(
+          Operation.setOptions({
+            lowThreshold: MULTISIG_CONFIG.PLATFORM_TREASURY.LOW_THRESHOLD,
+            medThreshold: MULTISIG_CONFIG.PLATFORM_TREASURY.MEDIUM_THRESHOLD,
+            highThreshold: MULTISIG_CONFIG.PLATFORM_TREASURY.HIGH_THRESHOLD,
+            masterWeight: MULTISIG_CONFIG.PLATFORM_TREASURY.MASTER_WEIGHT,
+          })
+        )
+        .setTimeout(180)
+        .build();
+
+      // Sign with master keypair (which still has full control at this point)
+      transaction.sign(walletKeypair);
+
+      // Submit transaction directly (no fee bump needed as we're not using treasury sponsorship)
+      const result = await this.server.submitTransaction(transaction);
+
+      // Update DB records to active status
+      await Promise.all([
+        wallet.update({
+          status: "active",
+          createdTxHash: result.hash,
+          metadata: {
+            ...wallet.metadata,
+            finalizedAt: new Date().toISOString(),
+            phase: "completed",
+            // Remove encrypted master key for security (master weight is now 0)
+            encryptedMasterKey: undefined,
+          },
+        }),
+        // Update all signers to active
+        MultiSigSigner.update(
+          { status: "active" },
+          {
+            where: {
+              multiSigWalletId: wallet.id,
+              status: "pending",
+            },
+          }
+        ),
+      ]);
+
+      logger.info(
+        `Treasury wallet ${publicKey} finalized with multisig setup. TxHash: ${result.hash}`
+      );
+
+      return {
+        success: true,
+        transactionHash: result.hash,
+        status: "active",
+        multisigConfig: {
+          lowThreshold: MULTISIG_CONFIG.PLATFORM_TREASURY.LOW_THRESHOLD,
+          mediumThreshold: MULTISIG_CONFIG.PLATFORM_TREASURY.MEDIUM_THRESHOLD,
+          highThreshold: MULTISIG_CONFIG.PLATFORM_TREASURY.HIGH_THRESHOLD,
+          masterWeight: MULTISIG_CONFIG.PLATFORM_TREASURY.MASTER_WEIGHT,
+        },
+        signers: signers.map((s) => ({
+          publicKey: s.publicKey,
+          role: s.role,
+          weight: s.weight,
+        })),
+      };
+    } catch (error: any) {
+      logger.error("Error finalizing treasury wallet setup:", error);
+
+      // Update status to failed for debugging
+      await MultiSigWallet.update(
+        {
+          status: "inactive",
+          metadata: sequelize.literal(
+            `metadata || '{"finalizationError": "${
+              error.message
+            }", "failedAt": "${new Date().toISOString()}"}'`
+          ),
+        },
+        { where: { stellarPublicKey: publicKey } }
+      );
+
+      throw error;
+    }
+  }
+
+  // ===========================================
+  // HELPER METHOD: CHECK FUNDING STATUS
+  // ===========================================
+
+  /**
+   * Helper method to check if a treasury wallet is ready for finalization
+   */
+  async checkTreasuryFundingStatus(publicKey: string) {
+    try {
+      const wallet = await MultiSigWallet.findOne({
+        where: {
+          stellarPublicKey: publicKey,
+          walletType: "platform_treasury",
+        },
+      });
+
+      if (!wallet) {
+        throw new Error("Treasury wallet not found");
+      }
+
+      const account = await this.server.loadAccount(publicKey);
+      const xlmBalance = account.balances.find(
+        (b) => b.asset_type === "native"
+      );
+      const currentBalance = parseFloat(xlmBalance?.balance || "0");
+      const requiredBalance = parseFloat(
+        wallet.metadata?.initialBalance || "0"
+      );
+
+      return {
+        publicKey,
+        status: wallet.status,
+        currentBalance,
+        requiredBalance,
+        isSufficientlyFunded: currentBalance >= requiredBalance,
+        readyForFinalization:
+          wallet.status === "awaiting_funding" &&
+          currentBalance >= requiredBalance,
+      };
+    } catch (error) {
+      logger.error("Error checking treasury funding status:", error);
       throw error;
     }
   }

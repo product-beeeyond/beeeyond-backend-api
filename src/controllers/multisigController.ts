@@ -8,6 +8,7 @@ import User from '../models/User';
 import Property from '../models/Property';
 import MultiSigWallet from '../models/MultiSigWallet';
 import logger from '../utils/logger';
+import MultiSigSigner from '../models/MultiSigSigner';
 // import { v4 as uuidv4 } from 'uuid';
 
 // ===========================================
@@ -113,12 +114,12 @@ export const createPlatformWallets = async (req: AuthRequest, res: Response) => 
     let walletResult;
     
     switch (walletType) {
-      case 'treasury':
-        walletResult = await stellarService.createPlatformTreasuryWallet({
-          description: description || 'Main platform treasury for funding operations',
-          createdBy: req.user!.id
-        });
-        break;
+      // case 'treasury':
+      //   walletResult = await stellarService.createPlatformTreasuryWallet({
+      //     description: description || 'Main platform treasury for funding operations',
+      //     createdBy: req.user!.id
+      //   });
+      //   break;
 
       case 'issuer':
         walletResult = await stellarService.createPlatformIssuerWallet({
@@ -166,7 +167,233 @@ export const createPlatformWallets = async (req: AuthRequest, res: Response) => 
     });
   }
 };
+// ===========================================
+// UPDATED CONTROLLER METHODS FOR TWO-PHASE TREASURY CREATION
+// ===========================================
 
+/**
+ * Phase 1: Create platform treasury wallet (initial creation)
+ * POST /api/multisig/platform/treasury/create
+ */
+export const createPlatformTreasury = async (req: AuthRequest, res: Response) => {
+  try {
+    // Only super admin can create platform wallets
+    if (req.user!.role !== 'super_admin') {
+      return res.status(403).json({ error: 'Super admin access required' });
+    }
+
+    const { description } = req.body;
+
+    // Check if platform treasury already exists
+    const existingTreasury = await MultiSigWallet.findOne({
+      where: { walletType: 'platform_treasury' }
+    });
+
+    if (existingTreasury) {
+      return res.status(400).json({ 
+        error: 'Platform treasury wallet already exists',
+        publicKey: existingTreasury.stellarPublicKey,
+        status: existingTreasury.status,
+        message: existingTreasury.status === 'awaiting_funding' 
+          ? 'Treasury exists but needs funding. Check funding status and finalize setup.'
+          : 'Treasury is already active.'
+      });
+    }
+
+    // Phase 1: Create treasury wallet
+    const treasuryResult = await stellarService.createPlatformTreasuryWallet({
+      description: description || 'Main platform treasury for funding operations',
+      createdBy: req.user!.id
+    });
+
+    logger.info(`Platform treasury created (Phase 1): ${treasuryResult.publicKey}`);
+
+    res.status(201).json({
+      message: 'Platform treasury created successfully (Phase 1)',
+      phase: 1,
+      treasury: {
+        publicKey: treasuryResult.publicKey,
+        walletId: treasuryResult.walletId,
+        status: treasuryResult.status,
+        requiredBalance: treasuryResult.requiredBalance,
+        fundingRequired: treasuryResult.fundingRequired,
+        nextSteps: treasuryResult.nextSteps,
+      },
+      instructions: treasuryResult.fundingRequired 
+        ? `IMPORTANT: Fund this wallet with ${treasuryResult.requiredBalance} XLM, then call POST /api/multisig/platform/treasury/finalize to complete setup.`
+        : 'Call POST /api/multisig/platform/treasury/finalize to complete multisig setup.'
+    });
+
+  } catch (error) {
+    logger.error('Create platform treasury error:', error);
+    res.status(500).json({ 
+      error: 'Failed to create platform treasury',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+};
+
+/**
+ * Phase 2: Finalize treasury wallet setup
+ * POST /api/multisig/platform/treasury/finalize
+ */
+export const finalizePlatformTreasury = async (req: AuthRequest, res: Response) => {
+  try {
+    // Only super admin can finalize platform wallets
+    if (req.user!.role !== 'super_admin') {
+      return res.status(403).json({ error: 'Super admin access required' });
+    }
+
+    const { publicKey } = req.body;
+
+    if (!publicKey) {
+      return res.status(400).json({ 
+        error: 'Treasury wallet public key is required' 
+      });
+    }
+
+    // Validate that this is a pending treasury wallet
+    const wallet = await MultiSigWallet.findOne({
+      where: { 
+        stellarPublicKey: publicKey,
+        walletType: 'platform_treasury',
+        status: ['awaiting_funding', 'awaiting_finalization']
+      }
+    });
+
+    if (!wallet) {
+      return res.status(404).json({ 
+        error: 'Treasury wallet not found or not in finalizable status',
+        hint: 'Wallet must be in awaiting_funding or awaiting_finalization status'
+      });
+    }
+
+    // Phase 2: Finalize multisig setup
+    const finalizationResult = await stellarService.finalizeTreasuryWalletSetup(publicKey);
+
+    logger.info(`Platform treasury finalized: ${publicKey}, TxHash: ${finalizationResult.transactionHash}`);
+
+    res.status(200).json({
+      message: 'Platform treasury finalized successfully (Phase 2)',
+      phase: 2,
+      treasury: {
+        publicKey,
+        status: finalizationResult.status,
+        transactionHash: finalizationResult.transactionHash,
+        multisigConfig: finalizationResult.multisigConfig,
+        signers: finalizationResult.signers,
+      },
+      success: true
+    });
+
+  } catch (error) {
+    logger.error('Finalize platform treasury error:', error);
+    res.status(500).json({ 
+      error: 'Failed to finalize platform treasury',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+};
+
+/**
+ * Check treasury funding status
+ * GET /api/multisig/platform/treasury/status/:publicKey
+ */
+export const checkTreasuryStatus = async (req: AuthRequest, res: Response) => {
+  try {
+    // Only super admin can check treasury status
+    if (req.user!.role !== 'super_admin') {
+      return res.status(403).json({ error: 'Super admin access required' });
+    }
+
+    const { publicKey } = req.params;
+
+    if (!publicKey) {
+      return res.status(400).json({ 
+        error: 'Treasury wallet public key is required' 
+      });
+    }
+
+    const statusResult = await stellarService.checkTreasuryFundingStatus(publicKey);
+
+    res.status(200).json({
+      message: 'Treasury status retrieved successfully',
+      treasury: statusResult,
+      recommendations: {
+        canFinalize: statusResult.readyForFinalization,
+        action: statusResult.readyForFinalization 
+          ? 'Ready for finalization - call POST /api/multisig/platform/treasury/finalize'
+          : statusResult.isSufficientlyFunded 
+            ? 'Already finalized or insufficient balance'
+            : `Fund wallet with ${statusResult.requiredBalance - statusResult.currentBalance} additional XLM`
+      }
+    });
+
+  } catch (error) {
+    logger.error('Check treasury status error:', error);
+    res.status(500).json({ 
+      error: 'Failed to check treasury status',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+};
+
+/**
+ * List all treasury wallets (for admin overview)
+ * GET /api/multisig/platform/treasury/list
+ */
+export const listTreasuryWallets = async (req: AuthRequest, res: Response) => {
+  try {
+    // Only super admin can list treasury wallets
+    if (req.user!.role !== 'super_admin') {
+      return res.status(403).json({ error: 'Super admin access required' });
+    }
+
+    const treasuries = await MultiSigWallet.findAll({
+      where: { walletType: 'platform_treasury' },
+      include: [
+        {
+          model: MultiSigSigner,
+          as: 'signers',
+          attributes: ['publicKey', 'role', 'weight', 'status']
+        }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+
+    const treasuriesWithStatus = await Promise.all(
+      treasuries.map(async (treasury) => {
+        try {
+          const statusResult = await stellarService.checkTreasuryFundingStatus(
+            treasury.stellarPublicKey
+          );
+          return {
+            ...treasury.toJSON(),
+            fundingStatus: statusResult,
+          };
+        } catch (error) {
+          return {
+            ...treasury.toJSON(),
+            fundingStatus: { error: 'Could not fetch on-chain status' },
+          };
+        }
+      })
+    );
+
+    res.status(200).json({
+      message: 'Treasury wallets retrieved successfully',
+      count: treasuries.length,
+      treasuries: treasuriesWithStatus,
+    });
+
+  } catch (error) {
+    logger.error('List treasury wallets error:', error);
+    res.status(500).json({ 
+      error: 'Failed to list treasury wallets',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+};
 // ===========================================
 // PROPERTY-SPECIFIC MULTISIG WALLETS
 // ===========================================
