@@ -645,6 +645,8 @@ class StellarService {
    * This phase creates the wallet structure without multisig setup to avoid circular dependency
    */
   async createPlatformTreasuryWallet(params: PlatformWalletParams) {
+    let multiSigWallet: any = null;
+
     try {
       const walletKeypair = Keypair.random();
       const platformKey2 = Keypair.random();
@@ -678,10 +680,6 @@ class StellarService {
           ).toFixed(7);
           await this.server.friendbot(walletKeypair.publicKey()).call();
           await this.sleep(2000);
-          // await this.fundWalletFromTreasury(
-          //   walletKeypair.publicKey(),
-          //   additionalFunding
-          // );
         }
       } else {
         // On mainnet, wallet must be funded manually before finalization
@@ -692,7 +690,7 @@ class StellarService {
       }
 
       // Create DB record immediately with pending status
-      const multiSigWallet = await MultiSigWallet.create({
+      multiSigWallet = await MultiSigWallet.create({
         stellarPublicKey: walletKeypair.publicKey(),
         walletType: "platform_treasury",
         lowThreshold: MULTISIG_CONFIG.PLATFORM_TREASURY.LOW_THRESHOLD,
@@ -709,6 +707,10 @@ class StellarService {
         },
       });
 
+      logger.info(
+        `Platform treasury wallet created successfully: ${multiSigWallet.id}`
+      );
+
       // Store platform signers in DB (private keys encrypted for later finalization)
       await Promise.all([
         MultiSigSigner.create({
@@ -717,6 +719,10 @@ class StellarService {
           weight: MULTISIG_CONFIG.PLATFORM_TREASURY.PRIMARY_WEIGHT,
           role: "platform_primary",
           status: "pending",
+          encryptedPrivateKey: encrypt(
+            this.platformKeypair.secret(),
+            "platform_key"
+          ),
         }),
         MultiSigSigner.create({
           multiSigWalletId: multiSigWallet.id,
@@ -743,7 +749,6 @@ class StellarService {
       ]);
 
       // Store the master keypair securely for finalization
-      // In production, this should be stored in a secure key management system
       const encryptedMasterKey = encrypt(
         walletKeypair.secret(),
         `treasury_master_${multiSigWallet.id}`
@@ -773,6 +778,27 @@ class StellarService {
       };
     } catch (error) {
       logger.error("Error creating platform treasury wallet (Phase 1):", error);
+
+      // Clean up any created database records
+      if (multiSigWallet?.id) {
+        try {
+          // Delete any signers that were created
+          await MultiSigSigner.destroy({
+            where: { multiSigWalletId: multiSigWallet.id },
+          });
+
+          // Delete the wallet record
+          await multiSigWallet.destroy();
+
+          logger.info(
+            `Cleaned up failed treasury wallet creation: ${multiSigWallet.id}`
+          );
+        } catch (cleanupError) {
+          logger.error("Error during cleanup:", cleanupError);
+          // Log but don't throw - original error is more important
+        }
+      }
+
       throw error;
     }
   }

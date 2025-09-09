@@ -189,16 +189,16 @@ export const createPlatformTreasury = async (req: AuthRequest, res: Response) =>
       where: { walletType: 'platform_treasury' }
     });
 
-    if (existingTreasury) {
-      return res.status(400).json({ 
-        error: 'Platform treasury wallet already exists',
-        publicKey: existingTreasury.stellarPublicKey,
-        status: existingTreasury.status,
-        message: existingTreasury.status === 'awaiting_funding' 
-          ? 'Treasury exists but needs funding. Check funding status and finalize setup.'
-          : 'Treasury is already active.'
-      });
-    }
+    // if (existingTreasury) {.              //deprecated. atomic implemetation now in stellar service
+    //   return res.status(400).json({ 
+    //     error: 'Platform treasury wallet already exists',
+    //     publicKey: existingTreasury.stellarPublicKey,
+    //     status: existingTreasury.status,
+    //     message: existingTreasury.status === 'awaiting_funding' 
+    //       ? 'Treasury exists but needs funding. Check funding status and finalize setup.'
+    //       : 'Treasury is already active.'
+    //   });
+    // }
 
     // Phase 1: Create treasury wallet
     const treasuryResult = await stellarService.createPlatformTreasuryWallet({

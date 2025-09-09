@@ -223,7 +223,7 @@ import {
   checkTreasuryStatus,
   listTreasuryWallets,
 } from "../controllers/multisigController";
-import MultiSigWallet from '../models/MultiSigWallet';
+import MultiSigWallet from "../models/MultiSigWallet";
 
 const router = Router();
 
@@ -393,76 +393,83 @@ router.post(
   createPlatformWallets
 );
 
-router.post("/platform/treasury/create", authenticate, createPlatformTreasury);
 router.post(
-  "/platform/treasury/finalize",
+  "/initiate-platform-treasury",
+  authenticate,
+  createPlatformTreasury
+);
+router.post(
+  "/finalize-platform-treasury",
   authenticate,
   finalizePlatformTreasury
 );
 router.get(
-  "/platform/treasury/status/:publicKey",
+  "/platform-treasury-status/:publicKey",
   authenticate,
   checkTreasuryStatus
 );
-router.get("/platform/treasury/list", authenticate, listTreasuryWallets);
+router.get("/platform-treasuries", authenticate, listTreasuryWallets);
 /**
  * Emergency recovery route for failed finalization
  * POST /api/multisig/platform/treasury/recover
  * Body: { publicKey: string, reason: string }
  * Auth: Super Admin only
- * 
+ *
  * Allows retry of finalization process if it failed due to network issues.
  */
-router.post('/platform/treasury/recover', authenticate, async (req: AuthRequest, res:Response) => {
-  try {
-    const { publicKey, reason } = req.body;
-    
-    if (req.user!.role !== 'super_admin') {
-      return res.status(403).json({ error: 'Super admin access required' });
-    }
+router.post(
+  "/platform/treasury/recover",
+  authenticate,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { publicKey, reason } = req.body;
 
-    if (!publicKey || !reason) {
-      return res.status(400).json({ error: 'publicKey and reason required' });
-    }
-
-    // Reset wallet to awaiting_finalization status
-    const wallet = await MultiSigWallet.findOne({
-      where: { 
-        stellarPublicKey: publicKey,
-        walletType: 'platform_treasury',
-        status: 'inactive'
+      if (req.user!.role !== "super_admin") {
+        return res.status(403).json({ error: "Super admin access required" });
       }
-    });
 
-    if (!wallet) {
-      return res.status(404).json({ 
-        error: 'Treasury wallet not found or not in recoverable status' 
+      if (!publicKey || !reason) {
+        return res.status(400).json({ error: "publicKey and reason required" });
+      }
+
+      // Reset wallet to awaiting_finalization status
+      const wallet = await MultiSigWallet.findOne({
+        where: {
+          stellarPublicKey: publicKey,
+          walletType: "platform_treasury",
+          status: "inactive",
+        },
+      });
+
+      if (!wallet) {
+        return res.status(404).json({
+          error: "Treasury wallet not found or not in recoverable status",
+        });
+      }
+
+      await wallet.update({
+        status: "awaiting_finalization",
+        metadata: {
+          ...wallet.metadata,
+          recoveryReason: reason,
+          recoveredAt: new Date().toISOString(),
+        },
+      });
+
+      res.json({
+        message: "Treasury wallet reset for recovery",
+        publicKey,
+        status: "awaiting_finalization",
+        nextStep: "Call finalize endpoint to retry setup",
+      });
+    } catch (error) {
+      res.status(500).json({
+        error: "Recovery failed",
+        details: error instanceof Error ? error.message : "Unknown error",
       });
     }
-
-    await wallet.update({
-      status: 'awaiting_finalization',
-      metadata: {
-        ...wallet.metadata,
-        recoveryReason: reason,
-        recoveredAt: new Date().toISOString(),
-      }
-    });
-
-    res.json({
-      message: 'Treasury wallet reset for recovery',
-      publicKey,
-      status: 'awaiting_finalization',
-      nextStep: 'Call finalize endpoint to retry setup'
-    });
-
-  } catch (error) {
-    res.status(500).json({ 
-      error: 'Recovery failed',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    });
   }
-});
+);
 
 // ===========================================
 // PROPERTY WALLET ROUTES

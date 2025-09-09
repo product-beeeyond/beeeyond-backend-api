@@ -197,7 +197,13 @@ MultiSigWallet.init(
       },
     },
     status: {
-      type: DataTypes.ENUM("active", "inactive", "recovered"),
+      type: DataTypes.ENUM(
+        "active",
+        "inactive",
+        "recovered",
+        "awaiting_finalization",
+        "awaiting_funding"
+      ),
       defaultValue: "active",
     },
     createdTxHash: {
