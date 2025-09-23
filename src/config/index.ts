@@ -57,7 +57,7 @@ export const BVN_VERIFICATION_URL = process.env.BVN_VERIFICATION_URL;
 export const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
 
 // Security
-export const BCRYPT_ROUNDS = process.env.BCRYPT_ROUNDS;
+export const BCRYPT_ROUNDS = process.env.BCRYPT_ROUNDS as string;
 export const RATE_LIMIT_WINDOW_MS = process.env.RATE_LIMIT_WINDOW_MS;
 export const RATE_LIMIT_MAX_REQUESTS = process.env.RATE_LIMIT_MAX_REQUESTS;
 

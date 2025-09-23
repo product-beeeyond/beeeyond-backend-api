@@ -1,10 +1,10 @@
 /* eslint-disable unused-imports/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { DataTypes, Model, Optional } from 'sequelize';
-import { sequelize } from '../config/database';
-import bcrypt from 'bcryptjs';
-import { BCRYPT_ROUNDS } from '../config';
-import { UserRole } from '../middleware/auth';
+import { DataTypes, Model, Optional } from "sequelize";
+import { sequelize } from "../config/database";
+import bcrypt from "bcryptjs";
+import { BCRYPT_ROUNDS } from "../config";
+import { UserRole } from "../middleware/auth";
 
 export interface UserAttributes {
   id: string;
@@ -17,9 +17,9 @@ export interface UserAttributes {
   dateOfBirth?: Date;
   nationality: string;
   address?: object;
-  investmentExperience: string;
-  riskTolerance: string;
-  kycStatus: string;
+  investmentExperience: "beginner" | "intermediate" | "advanced";
+  riskTolerance: "conservative" | "moderate" | "aggressive";
+  kycStatus: "pending" | "under_review" | "verified" | "rejected";
   isVerified: boolean;
   otp: number;
   otp_expiry?: Date;
@@ -31,13 +31,22 @@ export interface UserAttributes {
   createdAt?: Date;
   updatedAt?: Date;
 }
-type PublicUserAttributes = Omit<UserAttributes, 'password' | 'salt' | 'otp' | 'otp_expiry'>;
+type PublicUserAttributes = Omit<
+  UserAttributes,
+  "password" | "salt" | "otp" | "otp_expiry"
+>;
 
-type AdminUserAttributes = Omit<UserAttributes, 'password' | 'salt'>;
+type AdminUserAttributes = Omit<UserAttributes, "password" | "salt">;
 
-type UserCreationAttributes = Optional<UserAttributes, 'id' | 'createdAt' | 'updatedAt'>
+type UserCreationAttributes = Optional<
+  UserAttributes,
+  "id" | "createdAt" | "updatedAt"
+>;
 
-class User extends Model<UserAttributes, UserCreationAttributes> implements UserAttributes {
+class User
+  extends Model<UserAttributes, UserCreationAttributes>
+  implements UserAttributes
+{
   public id!: string;
   public email!: string;
   public password!: string;
@@ -50,9 +59,9 @@ class User extends Model<UserAttributes, UserCreationAttributes> implements User
   public otp_expiry!: Date;
   public otp!: number;
   public salt!: string;
-  public investmentExperience!: string;
-  public riskTolerance!: string;
-  public kycStatus!: string;
+  public investmentExperience!: "beginner" | "intermediate" | "advanced";
+  public riskTolerance!: "conservative" | "moderate" | "aggressive";
+  public kycStatus!: "pending" | "under_review" | "verified" | "rejected";
   public isVerified!: boolean;
   public referralCode?: string;
   public referredBy?: string;
@@ -131,7 +140,7 @@ User.init(
     },
     nationality: {
       type: DataTypes.STRING,
-      defaultValue: 'Nigerian',
+      defaultValue: "Nigerian",
     },
     address: {
       type: DataTypes.JSONB,
@@ -142,12 +151,12 @@ User.init(
       allowNull: false,
       validate: {
         notNull: {
-          msg: "Otp is required"
+          msg: "Otp is required",
         },
         notEmpty: {
           msg: "provide an Otp",
         },
-      }
+      },
     },
     otp_expiry: {
       type: DataTypes.DATE,
@@ -159,19 +168,19 @@ User.init(
         notEmpty: {
           msg: "provide an Otp",
         },
-      }
+      },
     },
     investmentExperience: {
-      type: DataTypes.ENUM('beginner', 'intermediate', 'advanced'),
-      defaultValue: 'beginner',
+      type: DataTypes.ENUM("beginner", "intermediate", "advanced"),
+      defaultValue: "beginner",
     },
     riskTolerance: {
-      type: DataTypes.ENUM('conservative', 'moderate', 'aggressive'),
-      defaultValue: 'moderate',
+      type: DataTypes.ENUM("conservative", "moderate", "aggressive"),
+      defaultValue: "moderate",
     },
     kycStatus: {
-      type: DataTypes.ENUM('pending', 'under_review', 'verified', 'rejected'),
-      defaultValue: 'pending',
+      type: DataTypes.ENUM("pending", "under_review", "verified", "rejected"),
+      defaultValue: "pending",
     },
     isVerified: {
       type: DataTypes.BOOLEAN,
@@ -195,15 +204,15 @@ User.init(
       allowNull: true,
     },
     role: {
-      type: DataTypes.ENUM('user', 'admin', 'super_admin'),
-      defaultValue: 'user',
+      type: DataTypes.ENUM("user", "admin", "super_admin"),
+      defaultValue: "user",
       allowNull: false,
     },
   },
   {
     sequelize,
-    modelName: 'User',
-    tableName: 'users',
+    modelName: "User",
+    tableName: "users",
     hooks: {
       beforeCreate: async (user: User) => {
         if (user.password) {
@@ -211,22 +220,25 @@ User.init(
           user.password = await bcrypt.hash(user.password, saltRounds);
         }
         if (!user.referralCode) {
-          user.referralCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+          user.referralCode = Math.random()
+            .toString(36)
+            .substring(2, 10)
+            .toUpperCase();
         }
       },
       beforeUpdate: async (user: User) => {
-        if (user.changed('password')) {
+        if (user.changed("password")) {
           const saltRounds = Number(BCRYPT_ROUNDS);
           user.password = await bcrypt.hash(user.password, saltRounds);
         }
       },
     },
     indexes: [
-      { fields: ['email'] },
-      { fields: ['phone'] },
-      { fields: ['referralCode'] },
-      { fields: ['kycStatus'] },
-      { fields: ['role'] }, // Added index for role field
+      { fields: ["email"] },
+      { fields: ["phone"] },
+      { fields: ["referralCode"] },
+      { fields: ["kycStatus"] },
+      { fields: ["role"] }, // Added index for role field
     ],
   }
 );

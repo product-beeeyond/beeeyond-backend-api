@@ -8,7 +8,7 @@ interface MultiSigSignerAttributes {
   publicKey: string;
   weight: number;
   role: 'user' | 'platform_recovery' | 'platform_primary' | 'platform_secondary' | 'platform_tertiary' | 'platform_issuer' | 'issuer_backup' | 'platform_distribution' | 'platform_governance' | 'property_manager' | 'governance_key';
-  status: 'active' | 'inactive' | 'recovered';
+  status: 'active' | 'inactive' | 'recovered' | 'pending';
   encryptedPrivateKey?: string; // Only for platform-controlled keys
   metadata?: object;
   createdAt?: Date;
@@ -24,7 +24,7 @@ class MultiSigSigner extends Model<MultiSigSignerAttributes, MultiSigSignerCreat
   public publicKey!: string;
   public weight!: number;
   public role!: 'user' | 'platform_recovery' | 'platform_primary' | 'platform_secondary' | 'platform_tertiary' | 'platform_issuer' | 'issuer_backup' | 'platform_distribution' | 'platform_governance' | 'property_manager' | 'governance_key';
-  public status!: 'active' | 'inactive' | 'recovered';
+  public status!: 'active' | 'inactive' | 'recovered' | 'pending';
   public encryptedPrivateKey?: string;
   public metadata?: object;
 
