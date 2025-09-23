@@ -418,7 +418,7 @@ class StellarService {
           weight: MULTISIG_CONFIG.USER_RECOVERY.USER_WEIGHT, // 2
           role: "user",
           status: "active",
-          // Store encrypted private key for user (they can recover with password)
+          // Store encrypted private key for user (they can recover with password). i don't think this is secure!
           encryptedPrivateKey: encrypt(
             userKeypair.secret(),
             userEmail + userId
@@ -748,7 +748,7 @@ class StellarService {
         }),
       ]);
 
-      // Store the master keypair securely for finalization
+      // Store the master keypair securely for finalization. i dont think this is secure!
       const encryptedMasterKey = encrypt(
         walletKeypair.secret(),
         `treasury_master_${multiSigWallet.id}`
