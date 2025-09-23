@@ -1,13 +1,13 @@
-import { Request, Response, NextFunction } from 'express';
-import jwt, { JwtPayload } from 'jsonwebtoken';
-import User from '../models/User';
-import { redisClient } from '../config/redis';
-import { JWT_SECRET } from '../config';
+import { Request, Response, NextFunction } from "express";
+import jwt, { JwtPayload } from "jsonwebtoken";
+import User from "../models/User";
+import { redisClient } from "../config/redis";
+import { JWT_SECRET } from "../config";
 
 export enum UserRole {
-  USER = 'user',
-  ADMIN = 'admin',
-  SUPER_ADMIN = 'super_admin'
+  USER = "user",
+  ADMIN = "admin",
+  SUPER_ADMIN = "super_admin",
 }
 
 interface CustomJwtPayload extends JwtPayload {
@@ -20,18 +20,22 @@ export interface AuthRequest extends Request {
   user?: User;
 }
 
-export const authenticate = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const authenticate = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) => {
   try {
     // console.log("token------", req.headers);
-    const token = req.header('authorization')?.replace('Bearer ', '');
+    const token = req.header("authorization")?.replace("Bearer ", "");
 
     if (!token) {
-      return res.status(401).json({ error: 'Access denied. No auth' });
+      return res.status(401).json({ error: "Access denied. No auth" });
     }
 
     const isBlacklisted = await redisClient.get(`blacklist:${token}`);
     if (isBlacklisted) {
-      return res.status(401).json({ error: 'Auth has been invalidated' });
+      return res.status(401).json({ error: "Auth has been invalidated" });
     }
     // console.log("token------", token);
     const decoded = jwt.verify(token, JWT_SECRET!) as CustomJwtPayload;
@@ -41,28 +45,30 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
       where: { email: decoded.email },
     })) as unknown as User;
     if (user.email) {
-      // req.user = user;
+      req.user = user;
       return next();
     }
-    return res.status(401).json({ error: 'Unauthorized access or user not found' });
 
+    return res
+      .status(401)
+      .json({ error: "Unauthorized access or user not found" });
   } catch {
-    res.status(401).json({ error: 'Unauthorized' });
+    res.status(401).json({ error: "Unauthorized" });
   }
 };
 
 export const authorize = (...roles: UserRole[]) => {
   return (req: AuthRequest, res: Response, next: NextFunction) => {
     if (!req.user) {
-      return res.status(401).json({ error: 'Authentication required' });
+      return res.status(401).json({ error: "Authentication required" });
     }
 
     // Check if user has any of the required roles
     if (roles.length > 0 && !roles.includes(req.user.role as UserRole)) {
       return res.status(403).json({
-        error: 'Insufficient permissions',
+        error: "Insufficient permissions",
         required: roles,
-        current: req.user.role
+        current: req.user.role,
       });
     }
 
@@ -71,16 +77,20 @@ export const authorize = (...roles: UserRole[]) => {
 };
 
 // Specific middleware for admin access (admin or super_admin)
-export const requireAdmin = (req: AuthRequest, res: Response, next: NextFunction) => {
+export const requireAdmin = (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) => {
   if (!req.user) {
-    return res.status(401).json({ error: 'Authentication required' });
+    return res.status(401).json({ error: "Admin Authentication required" });
   }
 
   const adminRoles = [UserRole.ADMIN, UserRole.SUPER_ADMIN];
   if (!adminRoles.includes(req.user.role as UserRole)) {
     return res.status(403).json({
-      error: 'Admin access required',
-      current: req.user.role
+      error: "Admin access required",
+      current: req.user.role,
     });
   }
 
@@ -88,30 +98,38 @@ export const requireAdmin = (req: AuthRequest, res: Response, next: NextFunction
 };
 
 // Specific middleware for super admin access only
-export const requireSuperAdmin = (req: AuthRequest, res: Response, next: NextFunction) => {
+export const requireSuperAdmin = (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) => {
   if (!req.user) {
-    return res.status(401).json({ error: 'Authentication required' });
+    return res.status(401).json({ error: "Authentication required" });
   }
 
   if (req.user.role !== UserRole.SUPER_ADMIN) {
     return res.status(403).json({
-      error: 'Super admin access required',
-      current: req.user.role
+      error: "Super admin access required",
+      current: req.user.role,
     });
   }
 
   next();
 };
 
-export const requireKYC = (req: AuthRequest, res: Response, next: NextFunction) => {
+export const requireKYC = (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) => {
   if (!req.user) {
-    return res.status(401).json({ error: 'Authentication required' });
+    return res.status(401).json({ error: "Authentication required" });
   }
 
-  if (req.user.kycStatus !== 'verified') {
+  if (req.user.kycStatus !== "verified") {
     return res.status(403).json({
-      error: 'KYC verification required',
-      kycStatus: req.user.kycStatus
+      error: "KYC verification required",
+      kycStatus: req.user.kycStatus,
     });
   }
 

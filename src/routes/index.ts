@@ -42,10 +42,7 @@ router.use("/auth", authLimiter, authRoutes);
 router.use("/user", userRoutes);
 router.use("/admin", adminRoutes);
 router.use("/super-admin", superAdminRoutes);
-// router.use('/multisig', multisigRoutes);
-
-// Add these route registrations
-
+// router.use('/multisig/wallet', multisigRoutes);
 // router.use('/api/recovery', recoveryRoutes);
 // app.use('/api/admin/recovery', adminRecoveryRoutes);
 
