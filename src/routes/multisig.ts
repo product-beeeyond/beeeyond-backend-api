@@ -202,10 +202,9 @@
 
 // export default router;
 
-import { Response, Router } from "express";
+import { Router } from "express";
 import {
   authenticate,
-  AuthRequest,
   requireAdmin,
   requireKYC,
   requireSuperAdmin,
@@ -218,12 +217,7 @@ import {
   // recoverUserWallet,
   getWalletInfo,
   listUserWallets,
-  createPlatformTreasury,
-  finalizePlatformTreasury,
-  checkTreasuryStatus,
-  listTreasuryWallets,
 } from "../controllers/multisigController";
-import MultiSigWallet from "../models/MultiSigWallet";
 
 const router = Router();
 
@@ -250,7 +244,7 @@ const validatePublicKey = (req: any, res: any, next: any) => {
 };
 
 const validateCreatePlatformWallet = (req: any, res: any, next: any) => {
-  const { walletType } = req.body;
+  const { walletType, description } = req.body;
   const validTypes = ["treasury", "issuer", "distribution", "fee_collection"];
 
   if (!walletType || !validTypes.includes(walletType)) {
@@ -259,11 +253,11 @@ const validateCreatePlatformWallet = (req: any, res: any, next: any) => {
     });
   }
 
-  // if (!description || description.trim().length < 10) {
-  //   return res.status(400).json({
-  //     error: "Description must be at least 10 characters long",
-  //   });
-  // }
+  if (!description || description.trim().length < 10) {
+    return res.status(400).json({
+      error: "Description must be at least 10 characters long",
+    });
+  }
 
   next();
 };
@@ -386,89 +380,11 @@ router.get("/user/wallets", authenticate, listUserWallets);
  * POST /api/multisig/platform/wallets
  */
 router.post(
-  "/create-platform-wallets",
+  "/platform/wallets",
   authenticate,
   requireSuperAdmin,
   validateCreatePlatformWallet,
   createPlatformWallets
-);
-
-router.post(
-  "/initiate-platform-treasury",
-  authenticate,
-  createPlatformTreasury
-);
-router.post(
-  "/finalize-platform-treasury",
-  authenticate,
-  finalizePlatformTreasury
-);
-router.get(
-  "/platform-treasury-status/:publicKey",
-  authenticate,
-  checkTreasuryStatus
-);
-router.get("/platform-treasuries", authenticate, listTreasuryWallets);
-/**
- * Emergency recovery route for failed finalization
- * POST /api/multisig/platform/treasury/recover
- * Body: { publicKey: string, reason: string }
- * Auth: Super Admin only
- *
- * Allows retry of finalization process if it failed due to network issues.
- */
-router.post(
-  "/platform/treasury/recover",
-  authenticate,
-  async (req: AuthRequest, res: Response) => {
-    try {
-      const { publicKey, reason } = req.body;
-
-      if (req.user!.role !== "super_admin") {
-        return res.status(403).json({ error: "Super admin access required" });
-      }
-
-      if (!publicKey || !reason) {
-        return res.status(400).json({ error: "publicKey and reason required" });
-      }
-
-      // Reset wallet to awaiting_finalization status
-      const wallet = await MultiSigWallet.findOne({
-        where: {
-          stellarPublicKey: publicKey,
-          walletType: "platform_treasury",
-          status: "inactive",
-        },
-      });
-
-      if (!wallet) {
-        return res.status(404).json({
-          error: "Treasury wallet not found or not in recoverable status",
-        });
-      }
-
-      await wallet.update({
-        status: "awaiting_finalization",
-        metadata: {
-          ...wallet.metadata,
-          recoveryReason: reason,
-          recoveredAt: new Date().toISOString(),
-        },
-      });
-
-      res.json({
-        message: "Treasury wallet reset for recovery",
-        publicKey,
-        status: "awaiting_finalization",
-        nextStep: "Call finalize endpoint to retry setup",
-      });
-    } catch (error) {
-      res.status(500).json({
-        error: "Recovery failed",
-        details: error instanceof Error ? error.message : "Unknown error",
-      });
-    }
-  }
 );
 
 // ===========================================
