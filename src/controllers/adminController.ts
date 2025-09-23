@@ -182,24 +182,24 @@ export const promoteToAdmin = async (req: AuthRequest, res: Response) => {
   try {
     const { userId } = req.params;
 
-    const user = await User.findOne({
-      where: {
-        id: userId,
-        role: UserRole.USER
-      }
-    });
+//     const user = await User.findOne({
+//       where: {
+//         id: userId,
+//         role: UserRole.USER
+//       }
+//     });
 
-    if (!user) {
-      return res.status(404).json({ error: 'User not found or already an admin' });
-    }
+//     if (!user) {
+//       return res.status(404).json({ error: 'User not found or already an admin' });
+//     }
 
-    // Promote user to admin
-    await user.update({
-      role: UserRole.ADMIN,
-      kycStatus: 'verified' // Admins should be KYC verified
-    });
+//     // Promote user to admin
+//     await user.update({
+//       role: UserRole.ADMIN,
+//       kycStatus: 'verified' // Admins should be KYC verified
+//     });
 
-    const { ...promotedUserData } = user.toJSON();
+//     const { ...promotedUserData } = user.toJSON();
 
     // Send promotion notification email
     // try {
@@ -212,15 +212,15 @@ export const promoteToAdmin = async (req: AuthRequest, res: Response) => {
     //   console.error('Failed to send promotion email:', emailError);
     // }
 
-    res.json({
-      message: 'User promoted to admin successfully',
-      admin: promotedUserData
-    });
-  } catch (error) {
-    console.error('Promote user error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-};
+//     res.json({
+//       message: 'User promoted to admin successfully',
+//       admin: promotedUserData
+//     });
+//   } catch (error) {
+//     console.error('Promote user error:', error);
+//     res.status(500).json({ error: 'Internal server error' });
+//   }
+// };
 
 // // Demote admin to regular user - Super Admin only
 // export const demoteAdmin = async (req: AuthRequest, res: Response) => {
