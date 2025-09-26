@@ -142,10 +142,7 @@ export async function ensureSuperAdmin(): Promise<void> {
   }
 }
 
-/**
- * Bootstrap function to be called during application startup
- * Includes database connection check
- */
+
 export async function bootstrapSuperAdmin(): Promise<void> {
   try {
     // Ensure database is connected before attempting to create super admin
