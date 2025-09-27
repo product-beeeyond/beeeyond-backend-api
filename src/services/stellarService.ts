@@ -88,6 +88,91 @@ class StellarService {
     }
     return this._platformKeypairs.get(keyType)!;
   }
+  /**
+ * Get or generate batched platform recovery key (1000 wallets per batch)
+ * This method manages recovery keys in batches to balance security and operational complexity
+ */
+private async getBatchedRecoveryKey(): Promise<{ 
+  keypair: Keypair; 
+  publicKey: () => string; 
+  secret: () => string; 
+  batchId: string 
+}> {
+  try {
+    // Count total user wallets created
+    const totalUserWallets = await MultiSigWallet.count({
+      where: { 
+        walletType: "user_recovery",
+        status: "active"
+      }
+    });
+
+    // Calculate current batch number (0-indexed)
+    const currentBatch = Math.floor(totalUserWallets / 1000);
+    const batchId = `recovery_batch_${currentBatch}`;
+
+    // Check if current batch recovery key already exists
+    // let existingBatchKey = null;
+    try {
+      const existingKeypair = await secureWalletService.retrieveWalletSecret(
+        "platform-global", // Use global context for batch keys
+        batchId
+      );
+      
+      if (existingKeypair) {
+        const keypair = Keypair.fromSecret(existingKeypair);
+        logger.info(`Using existing recovery batch ${currentBatch} for wallet ${totalUserWallets + 1}`);
+        
+        return {
+          keypair,
+          publicKey: () => keypair.publicKey(),
+          secret: () => keypair.secret(),
+          batchId
+        };
+      }
+    } catch (error) {
+      // Key doesn't exist yet, will create new one below
+      logger.info(`Recovery batch ${currentBatch} not found, creating new batch key`);
+    }
+
+    // Generate new recovery key for this batch
+    const newBatchKeypair = Keypair.random();
+    
+    // Store the new batch key globally
+    await secureWalletService.storeWalletSecret(
+      "platform-global",
+      batchId,
+      newBatchKeypair.secret(),
+      {
+        publicKey: newBatchKeypair.publicKey(),
+        role: "platform_recovery_batch",
+        batchNumber: String(currentBatch),
+        batchSize: String(1000),
+        createdAt: new Date().toISOString(),
+        description: `Platform recovery key for wallets ${currentBatch * 1000} to ${(currentBatch + 1) * 1000 - 1}`
+      }
+    );
+
+    logger.info(
+      `Created new recovery batch ${currentBatch} for wallets ${currentBatch * 1000}-${(currentBatch + 1) * 1000 - 1}`
+    );
+
+    return {
+      keypair: newBatchKeypair,
+      publicKey: () => newBatchKeypair.publicKey(),
+      secret: () => newBatchKeypair.secret(),
+      batchId
+    };
+
+  } catch (error) {
+    logger.error("Error managing batched recovery key:", error);
+    throw new Error(
+      `Failed to get/create batched recovery key: ${
+        error instanceof Error ? error.message : "Unknown error"
+      }`
+    );
+  }
+}
   constructor() {
     this.validateEnvironmentVariables();
     this.network =
@@ -307,203 +392,307 @@ class StellarService {
   // ===========================================
   // ENHANCED WALLET CREATION WITH PROPER RESERVES
   // ===========================================
+/**
+ * Get recovery keypair for a specific wallet (helper for recovery operations)
+ */
+async getRecoveryKeypairForWallet(walletPublicKey: string): Promise<Keypair> {
+  try {
+    // Find the wallet and its recovery signer
+    const wallet = await MultiSigWallet.findOne({
+      where: { stellarPublicKey: walletPublicKey },
+      include: [
+        {
+          model: MultiSigSigner,
+          as: "signers",
+          where: { 
+            role: "platform_recovery",
+            status: "active" 
+          },
+        },
+      ],
+    });
 
-  /**
-   * Create a 1-of-2 multisig wallet for user with proper reserve calculation
-   */
-  async createUserMultiSigWallet(params: UserWalletParams) {
-    try {
-      const { userId, userEmail, userName } = params;
+    if (!wallet || !wallet.signers?.[0]) {
+      throw new Error("Recovery signer not found for wallet");
+    }
 
-      // Generate new keypair for user
-      const userKeypair = Keypair.random();
-      const walletKeypair = Keypair.random();
+    const recoverySignerSecretId = wallet.signers[0].encryptedSecretId;
+    if (!recoverySignerSecretId) {
+      throw new Error("Recovery signer secret ID not found");
+    }
 
-      // Calculate required balance for user wallet
-      // Base + 2 additional signers (user + platform recovery)
-      const requiredBalance = this.calculateMinimumBalance({
-        additionalSigners: 2,
-        trustlines: 0, // Will add trustlines later as needed
-      });
+    // Retrieve the recovery keypair
+    const secret = await secureWalletService.retrieveWalletSecret(
+      wallet.id,
+      "platform_recovery_batch"
+    );
 
-      // Fund account with proper reserves
-      if (STELLAR_NETWORK === "testnet") {
-        await this.server.friendbot(walletKeypair.publicKey()).call();
-        await this.sleep(2000);
+    return Keypair.fromSecret(secret);
 
-        // Check if friendbot provided enough, if not, fund additional
-        const account = await this.server.loadAccount(
-          walletKeypair.publicKey()
-        );
-        const xlmBalance = account.balances.find(
-          (b) => b.asset_type === "native"
-        );
-        const currentBalance = parseFloat(xlmBalance?.balance || "0");
+  } catch (error) {
+    logger.error("Error getting recovery keypair for wallet:", error);
+    throw error;
+  }
+}
 
-        if (currentBalance < parseFloat(requiredBalance)) {
-          const additionalFunding = (
-            parseFloat(requiredBalance) -
-            currentBalance +
-            1
-          ).toFixed(7);
-          await this.fundWalletFromTreasury(
-            walletKeypair.publicKey(),
-            additionalFunding
-          );
-        }
-      } else {
+/**
+ * Get statistics about recovery key batches
+ */
+async getRecoveryBatchStats(): Promise<{
+  totalBatches: number;
+  currentBatch: number;
+  walletsInCurrentBatch: number;
+  walletsUntilNextBatch: number;
+}> {
+  try {
+    const totalUserWallets = await MultiSigWallet.count({
+      where: { 
+        walletType: "user_recovery",
+        status: "active"
+      }
+    });
+
+    const currentBatch = Math.floor(totalUserWallets / 1000);
+    const walletsInCurrentBatch = totalUserWallets % 1000;
+    const walletsUntilNextBatch = 1000 - walletsInCurrentBatch;
+    const totalBatches = currentBatch + 1;
+
+    return {
+      totalBatches,
+      currentBatch,
+      walletsInCurrentBatch: walletsInCurrentBatch || 1000, // If exactly 1000, show 1000 not 0
+      walletsUntilNextBatch: walletsUntilNextBatch === 1000 ? 0 : walletsUntilNextBatch,
+    };
+
+  } catch (error) {
+    logger.error("Error getting recovery batch stats:", error);
+    throw error;
+  }
+}
+/**
+ * Create a 1-of-2 multisig wallet for user with proper reserve calculation
+ */
+async createUserMultiSigWallet(params: UserWalletParams) {
+  try {
+    const { userId, userEmail, userName } = params;
+
+    // Generate new keypair for user
+    const userKeypair = Keypair.random();
+    const walletKeypair = Keypair.random();
+
+    // Calculate required balance for user wallet
+    // Base + 3 additional signers (user + 2 platform keys)
+    const requiredBalance = this.calculateMinimumBalance({
+      additionalSigners: 3,
+      trustlines: 0, // Will add trustlines later as needed
+    });
+
+    // Fund account with proper reserves
+    if (STELLAR_NETWORK === "testnet") {
+      await this.server.friendbot(walletKeypair.publicKey()).call();
+      await this.sleep(2000);
+
+      // Check if friendbot provided enough, if not, fund additional
+      const account = await this.server.loadAccount(
+        walletKeypair.publicKey()
+      );
+      const xlmBalance = account.balances.find(
+        (b) => b.asset_type === "native"
+      );
+      const currentBalance = parseFloat(xlmBalance?.balance || "0");
+
+      if (currentBalance < parseFloat(requiredBalance)) {
+        const additionalFunding = (
+          parseFloat(requiredBalance) -
+          currentBalance +
+          1
+        ).toFixed(7);
         await this.fundWalletFromTreasury(
           walletKeypair.publicKey(),
-          requiredBalance
+          additionalFunding
         );
       }
-
-      // Load the account
-      const account = await this.server.loadAccount(walletKeypair.publicKey());
-
-      // Create multisig transaction following SEP-30
-      const transaction = new TransactionBuilder(account, {
-        fee: BASE_FEE,
-        networkPassphrase: this.network,
-      })
-        // Add user as signer (weight 2)
-        .addOperation(
-          Operation.setOptions({
-            signer: {
-              ed25519PublicKey: userKeypair.publicKey(),
-              weight: MULTISIG_CONFIG.USER_RECOVERY.USER_WEIGHT,
-            },
-          })
-        )
-        // Add platform recovery key as signer (weight 1)
-        .addOperation(
-          Operation.setOptions({
-            signer: {
-              ed25519PublicKey: (
-                await this.getPlatformKeypair("recovery")
-              ).publicKey(),
-              weight: MULTISIG_CONFIG.USER_RECOVERY.PLATFORM_WEIGHT,
-            },
-          })
-        )
-        // Set thresholds: 1-of-2 (either user OR platform can sign)
-        .addOperation(
-          Operation.setOptions({
-            lowThreshold: MULTISIG_CONFIG.USER_RECOVERY.LOW_THRESHOLD, // 1 - payments, offers
-            medThreshold: MULTISIG_CONFIG.USER_RECOVERY.MEDIUM_THRESHOLD, // 2 - account management
-            highThreshold: MULTISIG_CONFIG.USER_RECOVERY.HIGH_THRESHOLD, // 2 - critical operations
-            masterWeight: MULTISIG_CONFIG.USER_RECOVERY.MASTER_WEIGHT,
-          })
-        )
-        .setTimeout(180)
-        .build();
-
-      // Sign with master key (this disables it due to masterWeight: 0)
-      transaction.sign(walletKeypair);
-
-      // Submit transaction with fee bump sponsorship
-      const result = await this.submitTransactionWithFeeBump(
-        transaction,
-        walletKeypair
-      );
-
-      // Store wallet in database
-      const multiSigWallet = await MultiSigWallet.create({
-        userId,
-        stellarPublicKey: walletKeypair.publicKey(),
-        walletType: "user_recovery",
-        lowThreshold: MULTISIG_CONFIG.USER_RECOVERY.LOW_THRESHOLD,
-        mediumThreshold: MULTISIG_CONFIG.USER_RECOVERY.MEDIUM_THRESHOLD,
-        highThreshold: MULTISIG_CONFIG.USER_RECOVERY.HIGH_THRESHOLD,
-        masterWeight: MULTISIG_CONFIG.USER_RECOVERY.MASTER_WEIGHT,
-        status: "active",
-        createdTxHash: result.hash,
-        metadata: {
-          userEmail,
-          userName,
-          initialBalance: requiredBalance,
-          createdAt: new Date().toISOString(),
-        },
-      });
-
-      const userSecretId = await secureWalletService.storeWalletSecret(
-        multiSigWallet.id,
-        "user",
-        userKeypair.secret(),
-        {
-          publicKey: userKeypair.publicKey(),
-          role: "user",
-          walletType: "user_recovery",
-          userId: userId,
-          userEmail: userEmail,
-        }
-      );
-      // Store platform recovery key in KMS
-      const recoverySecretId = await secureWalletService.storeWalletSecret(
-        multiSigWallet.id,
-        "platform_recovery",
-        (await this.getPlatformKeypair("recovery")).secret(),
-        {
-          publicKey: (await this.getPlatformKeypair("recovery")).publicKey(),
-          role: "platform_recovery",
-          walletType: "user_recovery",
-        }
-      );
-
-      // Store signers
-      await Promise.all([
-        MultiSigSigner.create({
-          multiSigWalletId: multiSigWallet.id,
-          userId: userId,
-          publicKey: userKeypair.publicKey(),
-          weight: MULTISIG_CONFIG.USER_RECOVERY.USER_WEIGHT, // 2
-          role: "user",
-          status: "active",
-          // Store encrypted private key for user (they can recover with password). i don't think this is secure!
-          // encryptedPrivateKey: encrypt(
-          //   userKeypair.secret(),
-          //   userEmail + userId
-          // ),
-          encryptedSecretId: userSecretId,
-        }),
-        MultiSigSigner.create({
-          multiSigWalletId: multiSigWallet.id,
-          publicKey: (await this.getPlatformKeypair("recovery")).publicKey(),
-          encryptedSecretId: recoverySecretId,
-          weight: MULTISIG_CONFIG.USER_RECOVERY.PLATFORM_WEIGHT, // 1
-          role: "platform_recovery",
-          status: "active",
-        }),
-      ]);
-
-      logger.info(
-        `User wallet created: ${walletKeypair.publicKey()} for user ${userId} with ${requiredBalance} XLM`
-      );
-
-      return {
-        publicKey: walletKeypair.publicKey(),
-        walletId: multiSigWallet.id,
-        initialBalance: requiredBalance,
-        userKeypair: {
-          publicKey: userKeypair.publicKey(),
-          secretKey: userKeypair.secret(),
-        },
-        canRecover: true,
-        thresholds: {
-          low: MULTISIG_CONFIG.USER_RECOVERY.LOW_THRESHOLD,
-          medium: MULTISIG_CONFIG.USER_RECOVERY.MEDIUM_THRESHOLD,
-          high: MULTISIG_CONFIG.USER_RECOVERY.HIGH_THRESHOLD,
-        },
-      };
-    } catch (error) {
-      logger.error("Error creating user wallet:", error);
-      throw new Error(
-        `Failed to create user wallet: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`
+    } else {
+      await this.fundWalletFromTreasury(
+        walletKeypair.publicKey(),
+        requiredBalance
       );
     }
+
+    // Load the account
+    const account = await this.server.loadAccount(walletKeypair.publicKey());
+
+    // Get or generate batched platform recovery key (1000 wallets per batch)
+    const batchRecoveryInfo = await this.getBatchedRecoveryKey();
+    const currentBatchRecoveryKey = batchRecoveryInfo.keypair;
+
+    // Create multisig transaction with 2-of-3 setup
+    const transaction = new TransactionBuilder(account, {
+      fee: BASE_FEE,
+      networkPassphrase: this.network,
+    })
+      // Add user as primary signer (weight 2)
+      .addOperation(
+        Operation.setOptions({
+          signer: {
+            ed25519PublicKey: userKeypair.publicKey(),
+            weight: 2, // User can make payments alone
+          },
+        })
+      )
+      // Add platform primary key as signer (weight 1)
+      .addOperation(
+        Operation.setOptions({
+          signer: {
+            ed25519PublicKey: (
+              await this.getPlatformKeypair("platform")
+            ).publicKey(),
+            weight: 1, // Platform key 1
+          },
+        })
+      )
+      // Add platform recovery key as second platform signer (weight 1)
+      .addOperation(
+        Operation.setOptions({
+          signer: {
+            ed25519PublicKey: currentBatchRecoveryKey.publicKey(),
+            weight: 1, // Platform key 2
+          },
+        })
+      )
+      // Set thresholds for 2-of-3 control
+      .addOperation(
+        Operation.setOptions({
+          lowThreshold: 2,   // User alone (weight 2) can make payments
+          medThreshold: 2,   // User alone OR two platform keys (1+1=2) for account changes
+          highThreshold: 2,  // User alone OR two platform keys for critical operations
+          masterWeight: 0,   // Disable master key
+        })
+      )
+      .setTimeout(180)
+      .build();
+
+    // Sign with master key (this disables it due to masterWeight: 0)
+    transaction.sign(walletKeypair);
+
+    // Submit transaction with fee bump sponsorship
+    const result = await this.submitTransactionWithFeeBump(
+      transaction,
+      walletKeypair
+    );
+
+    // Store wallet in database
+    const multiSigWallet = await MultiSigWallet.create({
+      userId,
+      stellarPublicKey: walletKeypair.publicKey(),
+      walletType: "user_recovery",
+      lowThreshold: 2,
+      mediumThreshold: 2,
+      highThreshold: 2,
+      masterWeight: 0,
+      status: "active",
+      createdTxHash: result.hash,
+      metadata: {
+        userEmail,
+        userName,
+        initialBalance: requiredBalance,
+        createdAt: new Date().toISOString(),
+      },
+    });
+
+    const userSecretId = await secureWalletService.storeWalletSecret(
+      multiSigWallet.id,
+      "user",
+      userKeypair.secret(),
+      {
+        publicKey: userKeypair.publicKey(),
+        role: "user",
+        walletType: "user_recovery",
+        userId: userId,
+        userEmail: userEmail,
+      }
+    );
+    // Store platform primary key in KMS
+    const platformSecretId = await secureWalletService.storeWalletSecret(
+      multiSigWallet.id,
+      "platform_primary",
+      (await this.getPlatformKeypair("platform")).secret(),
+      {
+        publicKey: (await this.getPlatformKeypair("platform")).publicKey(),
+        role: "platform_primary",
+        walletType: "user_recovery",
+      }
+    );
+    // Store batched platform recovery key reference for this user wallet
+    const platformRecoverySecretId = await secureWalletService.storeWalletSecret(
+      multiSigWallet.id,
+      "platform_recovery_batch",
+      currentBatchRecoveryKey.secret(),
+      {
+        publicKey: currentBatchRecoveryKey.publicKey(),
+        role: "platform_recovery",
+        walletType: "user_recovery",
+        batchId: batchRecoveryInfo.batchId,
+      }
+    );
+
+    // Store signers
+    await Promise.all([
+      MultiSigSigner.create({
+        multiSigWalletId: multiSigWallet.id,
+        userId: userId,
+        publicKey: userKeypair.publicKey(),
+        weight: 2, // User can make payments alone
+        role: "user",
+        status: "active",
+        encryptedSecretId: userSecretId,
+      }),
+      MultiSigSigner.create({
+        multiSigWalletId: multiSigWallet.id,
+        publicKey: (await this.getPlatformKeypair("platform")).publicKey(),
+        encryptedSecretId: platformSecretId,
+        weight: 1, // Platform key 1
+        role: "platform_primary",
+        status: "active",
+      }),
+      MultiSigSigner.create({
+        multiSigWalletId: multiSigWallet.id,
+        publicKey: currentBatchRecoveryKey.publicKey(),
+        encryptedSecretId: platformRecoverySecretId,
+        weight: 1, // Platform key 2
+        role: "platform_recovery",
+        status: "active",
+      }),
+    ]);
+
+    logger.info(
+      `User wallet created: ${walletKeypair.publicKey()} for user ${userId} with ${requiredBalance} XLM`
+    );
+
+    return {
+      publicKey: walletKeypair.publicKey(),
+      walletId: multiSigWallet.id,
+      initialBalance: requiredBalance,
+      userKeypair: {
+        publicKey: userKeypair.publicKey(),
+        secretKey: userKeypair.secret(),
+      },
+      canRecover: true,
+      thresholds: {
+        low: 2,
+        medium: 2,
+        high: 2,
+      },
+    };
+  } catch (error) {
+    logger.error("Error creating user wallet:", error);
+    throw new Error(
+      `Failed to create user wallet: ${
+        error instanceof Error ? error.message : "Unknown error"
+      }`
+    );
   }
+}
   // ===========================================
   // PHASE 1: INITIAL TREASURY WALLET CREATION
   // ===========================================
