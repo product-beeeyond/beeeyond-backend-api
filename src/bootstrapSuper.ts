@@ -3,15 +3,6 @@ import User from "./models/User";
 import logger from "./utils/logger";
 
 /**
- * Hash password using bcrypt with salt
- */
-// const hashPassword = async (password: string): Promise<{ hashedPassword: string; salt: string }> => {
-//   const salt = await bcrypt.genSalt(BCRYPT_ROUNDS);
-//   const hashedPassword = await bcrypt.hash(password, salt);
-//   return { hashedPassword, salt };
-// };
-
-/**
  * Validates super admin environment variables
  */
 const validateSuperAdminEnv = (): {

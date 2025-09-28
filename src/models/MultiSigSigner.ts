@@ -15,8 +15,8 @@ export interface MultiSigSignerAttributes {
     | "platform_tertiary"
     | "platform_issuer"
     | "issuer_backup"
-    | "platform_distribution"
-    | "platform_governance"
+    | "property_distribution"
+    | "property_governance"
     | "property_manager"
     | "governance_key";
   status: "active" | "inactive" | "recovered" | "pending";
@@ -49,8 +49,8 @@ class MultiSigSigner
     | "platform_tertiary"
     | "platform_issuer"
     | "issuer_backup"
-    | "platform_distribution"
-    | "platform_governance"
+    | "property_distribution"
+    | "property_governance"
     | "property_manager"
     | "governance_key";
   public status!: "active" | "inactive" | "recovered" | "pending";
@@ -109,8 +109,8 @@ MultiSigSigner.init(
         "platform_tertiary",
         "platform_issuer",
         "issuer_backup",
-        "platform_distribution",
-        "platform_governance",
+        "property_distribution",
+        "property_governance",
         "property_manager",
         "governance_key"
       ),
@@ -136,8 +136,8 @@ MultiSigSigner.init(
             "platform_tertiary",
             "platform_issuer",
             "issuer_backup",
-            "platform_distribution",
-            "platform_governance",
+            "property_distribution",
+            "property_governance",
             "property_manager",
             "governance_key",
           ];
