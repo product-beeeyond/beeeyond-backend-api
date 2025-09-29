@@ -2,20 +2,20 @@
 import crypto from 'crypto';
 import {
   KMSClient,
-  EncryptCommand,
+  // EncryptCommand,
   DecryptCommand,
   GenerateDataKeyCommand,
   CreateKeyCommand,
   DescribeKeyCommand,
   EnableKeyRotationCommand,
-  GetParametersForImportCommand,
-  PutParameterCommand,
-  GetParameterCommand,
+  // GetParametersForImportCommand,
+  // PutParameterCommand,
+  // GetParameterCommand,
 } from '@aws-sdk/client-kms';
 import {
   SSMClient,
   PutParameterCommand as SSMPutParameterCommand,
-  GetParameterCommand as SSMGetParameterCommand,
+  // GetParameterCommand as SSMGetParameterCommand,
 } from '@aws-sdk/client-ssm';
 import logger from './logger';
 
@@ -58,7 +58,7 @@ class SecureKMSManager {
         // Create new KMS key
         const createKeyCommand = new CreateKeyCommand({
           Description: 'Stellar Wallet Secrets Encryption Key',
-          Usage: 'ENCRYPT_DECRYPT',
+          KeyUsage: 'ENCRYPT_DECRYPT',
           KeySpec: 'SYMMETRIC_DEFAULT',
           MultiRegion: false,
           Tags: [

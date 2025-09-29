@@ -154,9 +154,12 @@ export const createPropertySchema = Joi.object({
     'number.positive': 'Monthly rental income must be positive'
   }),
   
-  propertyManager: Joi.string().max(200).optional().messages({
-    'string.max': 'Property manager name too long (max 200 characters)'
-  }),
+  propertyManagerPublicKey: Joi.string()
+    .pattern(/^[GC][A-Z2-7]{55}$/)
+    .optional()
+    .messages({
+      'string.pattern.base': 'Invalid Stellar public key format'
+    }),
   
   featured: Joi.boolean().default(false).messages({
     'boolean.base': 'Featured must be true or false'
@@ -218,9 +221,12 @@ export const updatePropertySchema = Joi.object({
     'number.positive': 'Monthly rental income must be positive'
   }),
   
-  propertyManager: Joi.string().max(200).optional().messages({
-    'string.max': 'Property manager name too long (max 200 characters)'
-  }),
+  propertyManagerPublicKey: Joi.string()
+    .pattern(/^[GC][A-Z2-7]{55}$/)
+    .optional()
+    .messages({
+      'string.pattern.base': 'Invalid Stellar public key format'
+    }),
   
   status: Joi.string()
     .valid('active', 'coming_soon', 'sold_out', 'maintenance', 'inactive')

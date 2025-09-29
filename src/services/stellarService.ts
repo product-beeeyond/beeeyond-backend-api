@@ -45,7 +45,7 @@ interface PlatformWalletParams {
 interface PropertyWalletParams {
   propertyId: string;
   propertyTitle: string;
-  propertyManager?: Keypair;
+  propertyManagerPublicKey?: string;
   createdBy: string;
 }
 
@@ -1412,7 +1412,7 @@ class StellarService {
 
     try {
       const walletKeypair = Keypair.random();
-      const propertyManagerKey = params?.propertyManager;
+      const propertyManagerKey = params?.propertyManagerPublicKey;
       if (!propertyManagerKey) {
         throw new Error("propertyManagerKey is required");
       }

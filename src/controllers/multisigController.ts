@@ -451,7 +451,7 @@ export const createPropertyWallets = async (
     const walletResult = await stellarService.createPropertyWallets({
       propertyId: property.id,
       propertyTitle: property.title,
-      propertyManager: property.propertyManager,
+      propertyManagerPublicKey: property.propertyManagerPublicKey,
       createdBy: req.user!.id,
     });
 
@@ -833,7 +833,7 @@ export const listUserWallets = async (req: AuthRequest, res: Response) => {
 //     const walletResult = await stellarService.createPropertyWallets({
 //       propertyId: property.id,
 //       propertyTitle: property.title,
-//       propertyManager: property.propertyManager,
+//       propertyManager: property.propertyManagerPublicKey,
 //       createdBy: req.user!.id
 //     });
 

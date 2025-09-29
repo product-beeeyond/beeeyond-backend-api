@@ -1,14 +1,14 @@
 // /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Response } from 'express';
-// import bcrypt from 'bcryptjs';
+import bcrypt from 'bcryptjs';
 import { AuthRequest, UserRole } from '../middleware/auth';
 import User from '../models/User';
-// // import { generateToken } from '../utils/jwt';
-// // import { sendWelcomeEmail } from '../utils/email';
+// import { generateToken } from '../utils/jwt';
+// import { sendWelcomeEmail } from '../utils/email';
 // import { BCRYPT_ROUNDS } from '../config';
 // import { emailService } from '../services/emailService';
-// import logger from '../utils/logger';
-// import RecoveryAuditLog from '../models/RecoveryAuditLog';
+import logger from '../utils/logger';
+import RecoveryAuditLog from '../models/RecoveryAuditLog';
 // import MultiSigWallet from '../models/MultiSigWallet';
 // import RecoveryRequest from '../models/RecoveryRequest';
 // import MultiSigSigner from '../models/MultiSigSigner';
@@ -217,86 +217,86 @@ export const promoteToAdmin = async (req: AuthRequest, res: Response) => {
   }
 };
 
-// // Demote admin to regular user - Super Admin only
-// export const demoteAdmin = async (req: AuthRequest, res: Response) => {
-//   try {
-//     const { adminId } = req.params;
+// Demote admin to regular user - Super Admin only
+export const demoteAdmin = async (req: AuthRequest, res: Response) => {
+  try {
+    const { adminId } = req.params;
 
-//     const admin = await User.findOne({
-//       where: {
-//         id: adminId,
-//         role: UserRole.ADMIN
-//       }
-//     });
+    const admin = await User.findOne({
+      where: {
+        id: adminId,
+        role: UserRole.ADMIN
+      }
+    });
 
-//     if (!admin) {
-//       return res.status(404).json({ error: 'Admin user not found' });
-//     }
+    if (!admin) {
+      return res.status(404).json({ error: 'Admin user not found' });
+    }
 
-//     // Demote admin to regular user
-//     await admin.update({ role: UserRole.USER });
+    // Demote admin to regular user
+    await admin.update({ role: UserRole.USER });
 
-//     const { ...demotedUserData } = admin.toJSON();
+    const { ...demotedUserData } = admin.toJSON();
 
-//     res.json({
-//       message: 'Admin demoted to regular user successfully',
-//       user: demotedUserData
-//     });
-//   } catch (error) {
-//     console.error('Demote admin error:', error);
-//     res.status(500).json({ error: 'Internal server error' });
-//   }
-// };
+    res.json({
+      message: 'Admin demoted to regular user successfully',
+      user: demotedUserData
+    });
+  } catch (error) {
+    console.error('Demote admin error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
 
-// // Reset admin password - Super Admin only
-// export const resetAdminPassword = async (req: AuthRequest, res: Response) => {
-//   try {
-//     const { adminId } = req.params;
-//     const { newPassword } = req.body;
+// Reset admin password - Super Admin only
+export const resetAdminPassword = async (req: AuthRequest, res: Response) => {
+  try {
+    const { adminId } = req.params;
+    const { newPassword } = req.body;
 
-//     if (!newPassword || newPassword.length < 8) {
-//       return res.status(400).json({
-//         error: 'New password must be at least 8 characters long'
-//       });
-//     }
+    if (!newPassword || newPassword.length < 8) {
+      return res.status(400).json({
+        error: 'New password must be at least 8 characters long'
+      });
+    }
 
-//     const admin = await User.findOne({
-//       where: {
-//         id: adminId,
-//         role: UserRole.ADMIN
-//       }
-//     });
+    const admin = await User.findOne({
+      where: {
+        id: adminId,
+        role: UserRole.ADMIN
+      }
+    });
 
-//     if (!admin) {
-//       return res.status(404).json({ error: 'Admin user not found' });
-//     }
+    if (!admin) {
+      return res.status(404).json({ error: 'Admin user not found' });
+    }
 
-//     // Hash new password
-//     const saltRounds = 12;
-//     const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
+    // Hash new password
+    const saltRounds = 12;
+    const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
 
-//     // Update password
-//     await admin.update({ password: hashedPassword });
+    // Update password
+    await admin.update({ password: hashedPassword });
 
-//     // Send password reset notification
-//     try {
-//       await sendPasswordResetNotification({
-//         email: admin.email,
-//         firstName: admin.firstName!
-//       });
-//     } catch (emailError) {
-//       console.error('Failed to send password reset notification:', emailError);
-//     }
+    // Send password reset notification
+    try {
+      await sendPasswordResetNotification({
+        email: admin.email,
+        firstName: admin.firstName!
+      });
+    } catch (emailError) {
+      console.error('Failed to send password reset notification:', emailError);
+    }
 
-//     res.json({
-//       message: 'Admin password reset successfully',
-//       adminId: admin.id
-//     });
-//   } catch (error) {
-//     console.error('Reset admin password error:', error);
-//     res.status(500).json({ error: 'Internal server error' });
-//   }
-// };
+    res.json({
+      message: 'Admin password reset successfully',
+      adminId: admin.id
+    });
+  } catch (error) {
+    console.error('Reset admin password error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
 
 // const sendPromotionEmail = async (data: {
 //   email: string;
@@ -307,64 +307,64 @@ export const promoteToAdmin = async (req: AuthRequest, res: Response) => {
 //   console.log(`Sending promotion email to ${data.email} for ${data.newRole} role`);
 // };
 
-// const sendPasswordResetNotification = async (data: {
-//   email: string;
-//   firstName: string;
-// }) => {
-//   // Implement your email service here
-//   console.log(`Sending password reset notification to ${data.email}`);
-// };
+const sendPasswordResetNotification = async (data: {
+  email: string;
+  firstName: string;
+}) => {
+  // Implement your email service here
+  console.log(`Sending password reset notification to ${data.email}`);
+};
 
 
-// /**
-//  * Get recovery audit log
-//  * GET /api/admin/recovery/:requestId/audit
-//  */
-// export const getRecoveryAuditLog = async (req: AuthRequest, res: Response) => {
-//   try {
-//     const { requestId } = req.params;
+/**
+ * Get recovery audit log
+ * GET /api/admin/recovery/:requestId/audit
+ */
+export const getRecoveryAuditLog = async (req: AuthRequest, res: Response) => {
+  try {
+    const { requestId } = req.params;
 
-//     // Verify admin role
-//     if (!['admin', 'super_admin'].includes(req.user!.role)) {
-//       return res.status(403).json({ error: 'Admin access required' });
-//     }
+    // Verify admin role
+    if (!['admin', 'super_admin'].includes(req.user!.role)) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
 
-//     const auditLogs = await RecoveryAuditLog.findAll({
-//       where: { recoveryRequestId: requestId },
-//       include: [
-//         {
-//           model: User,
-//           as: 'performer',
-//           attributes: ['id', 'email', 'firstName', 'lastName', 'role']
-//         }
-//       ],
-//       order: [['performedAt', 'ASC']]
-//     });
+    const auditLogs = await RecoveryAuditLog.findAll({
+      where: { recoveryRequestId: requestId },
+      include: [
+        {
+          model: User,
+          as: 'performer',
+          attributes: ['id', 'email', 'firstName', 'lastName', 'role']
+        }
+      ],
+      order: [['performedAt', 'ASC']]
+    });
 
-//     res.json({
-//       auditLogs: auditLogs.map(log => ({
-//         id: log.id,
-//         actionType: log.actionType,
-//         performedBy: log.performedBy,
-//         performedAt: log.performedAt,
-//         details: log.details,
-//         ipAddress: log.ipAddress,
-//         userAgent: log.userAgent
-//       }))
-//     });
+    res.json({
+      auditLogs: auditLogs.map(log => ({
+        id: log.id,
+        actionType: log.actionType,
+        performedBy: log.performedBy,
+        performedAt: log.performedAt,
+        details: log.details,
+        ipAddress: log.ipAddress,
+        userAgent: log.userAgent
+      }))
+    });
 
-//   } catch (error) {
-//     logger.error('Get audit log error:', error);
-//     res.status(500).json({ 
-//       error: 'Failed to get audit log',
-//       details: error instanceof Error ? error.message : 'Unknown error'
-//     });
-//   }
-// };
-// /**
-//  * Admin approves recovery request
-//  * POST /api/admin/recovery/:requestId/approve
-//  */
+  } catch (error) {
+    logger.error('Get audit log error:', error);
+    res.status(500).json({ 
+      error: 'Failed to get audit log',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+};
+/**
+ * Admin approves recovery request
+ * POST /api/admin/recovery/:requestId/approve
+ */
 // export const approveRecoveryRequest = async (req: AuthRequest, res: Response) => {
 //   try {
 //     const { requestId } = req.params;
@@ -498,10 +498,10 @@ export const promoteToAdmin = async (req: AuthRequest, res: Response) => {
 //   }
 // };
 
-// /**
-//  * Admin rejects recovery request
-//  * POST /api/admin/recovery/:requestId/reject
-//  */
+/**
+ * Admin rejects recovery request
+ * POST /api/admin/recovery/:requestId/reject
+ */
 // export const rejectRecoveryRequest = async (req: AuthRequest, res: Response) => {
 //   try {
 //     const { requestId } = req.params;
@@ -583,10 +583,10 @@ export const promoteToAdmin = async (req: AuthRequest, res: Response) => {
 //   }
 // };
 
-// /**
-//  * Admin lists all recovery requests
-//  * GET /api/admin/recovery/requests
-//  */
+/**
+ * Admin lists all recovery requests
+ * GET /api/admin/recovery/requests
+ */
 // export const listAllRecoveryRequests = async (req: AuthRequest, res: Response) => {
 //   try {
 //     // Verify admin role
@@ -646,10 +646,10 @@ export const promoteToAdmin = async (req: AuthRequest, res: Response) => {
 //   }
 // };
 
-// /**
-//  * Admin retries failed recovery
-//  * POST /api/admin/recovery/:requestId/retry
-//  */
+/**
+ * Admin retries failed recovery
+ * POST /api/admin/recovery/:requestId/retry
+ */
 // export const retryFailedRecovery = async (req: AuthRequest, res: Response) => {
 //   try {
 //     const { requestId } = req.params;
@@ -767,10 +767,10 @@ export const promoteToAdmin = async (req: AuthRequest, res: Response) => {
 //   }
 // };
 
-// /**
-//  * Force execute recovery (emergency admin function)
-//  * POST /api/admin/recovery/:requestId/force-execute
-//  */
+/**
+ * Force execute recovery (emergency admin function)
+ * POST /api/admin/recovery/:requestId/force-execute
+ */
 // export const forceExecuteRecovery = async (req: AuthRequest, res: Response) => {
 //   try {
 //     const { requestId } = req.params;
