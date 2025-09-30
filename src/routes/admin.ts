@@ -7,7 +7,7 @@ import {
   // requireKYC,
   UserRole,
 } from "../middleware/auth";
-// import { approveKYC, bulkKYCAction, getKYCDetails, getKYCStats, getPendingKYCApprovals } from '../controllers/adminController';
+import { approveKYC, bulkKYCAction, getKYCDetails, getKYCStats, getPendingKYCApprovals } from '../controllers/adminController';
 
 const router = express.Router();
 
@@ -66,42 +66,42 @@ router.post('/approve-kyc/:userId',
  * Get all pending KYC applications for review
  * GET /api/admin/kyc/pending?page=1&limit=20&search=query
  */
-// router.get('/kyc/pending',
-//   authenticate,
-//   requireAdmin,
-//   getPendingKYCApprovals
-// );
+router.get('/kyc/pending',
+  authenticate,
+  requireAdmin,
+  getPendingKYCApprovals
+);
 
 /**
  * Get KYC statistics for admin dashboard
  * GET /api/admin/kyc/stats
  */
-// router.get('/kyc/stats',
-//   authenticate,
-//   requireAdmin,
-//   getKYCStats
-// );
+router.get('/kyc/stats',
+  authenticate,
+  requireAdmin,
+  getKYCStats
+);
 
 /**
  * Get detailed KYC information for a specific user
  * GET /api/admin/kyc/:userId/details
  */
-// router.get('/kyc/:userId/details',
-//   authenticate,
-//   requireAdmin,
-//   getKYCDetails
-// );
+router.get('/kyc/:userId/details',
+  authenticate,
+  requireAdmin,
+  getKYCDetails
+);
 
 /**
  * Bulk approve/reject multiple KYC applications
  * POST /api/admin/kyc/bulk-action
  * Body: { userIds: string[], action: 'approve' | 'reject', reason?: string }
  */
-// router.post('/kyc/bulk-action',
-//   authenticate,
-//   requireAdmin,
-//   bulkKYCAction
-// );
+router.post('/kyc/bulk-action',
+  authenticate,
+  requireAdmin,
+  bulkKYCAction
+);
 
 // POST   /admin/approve-kyc/:userId          // Approve/reject individual KYC
 // GET    /admin/kyc/pending                  // Get pending applications

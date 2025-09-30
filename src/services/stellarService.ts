@@ -1412,11 +1412,27 @@ class StellarService {
 
     try {
       const walletKeypair = Keypair.random();
-      const propertyManagerKey = params?.propertyManagerPublicKey;
-      if (!propertyManagerKey) {
-        throw new Error("propertyManagerKey is required");
+      // Get property manager keypair from database
+      if (!params.propertyManagerPublicKey) {
+        throw new Error("propertyManagerPublicKey is required");
+      }
+      // Find the property manager's wallet in the database
+      const propertyManagerWallet = await MultiSigWallet.findOne({
+        where: {
+          stellarPublicKey: params.propertyManagerPublicKey,
+          status: "active",
+        },
+      });
+      if (!propertyManagerWallet) {
+        throw new Error("Property manager wallet not found");
       }
 
+      const propertyManagerKey =
+        await secureWalletService.getKeypairFromStorage(
+          propertyManagerWallet.id,
+          "user" // or the appropriate role for the property manager
+        );
+        
       // Calculate reserves: Base + signers + expected trustlines
       const additionalSigners = 2;
       const expectedTrustlines = 2; // Property token + NGN
