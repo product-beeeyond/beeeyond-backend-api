@@ -82,7 +82,7 @@ const startServer = async () => {
     await sequelize.authenticate();
     logger.info("Database connection established successfully");
     // Sync database (be careful with force: true in production)
-    await sequelize.sync({ force: false });
+    await sequelize.sync({ force: true });
     logger.info("Database synchronized successfully");
     await bootstrapSuperAdmin();
     // Test Redis connection

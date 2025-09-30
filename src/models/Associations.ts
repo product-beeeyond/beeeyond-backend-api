@@ -8,43 +8,204 @@ import RecoveryRequest from './RecoveryRequest';
 import RecoveryAuditLog from './RecoveryAuditLog';
 
 // User associations
-User.hasMany(MultiSigWallet, { foreignKey: 'userId', as: 'multiSigWallets' });
-User.hasMany(MultiSigSigner, { foreignKey: 'userId', as: 'signerRoles' });
+User.hasMany(MultiSigWallet, { 
+  foreignKey: 'userId', 
+  as: 'multiSigWallets',
+  constraints: true,
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
+
+User.hasMany(MultiSigSigner, { 
+  foreignKey: 'userId', 
+  as: 'signerRoles',
+  constraints: true,
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
 
 // Property associations
-Property.hasMany(MultiSigWallet, { foreignKey: 'propertyId', as: 'multiSigWallets' });
+Property.hasMany(MultiSigWallet, { 
+  foreignKey: 'propertyId', 
+  as: 'multiSigWallets',
+  constraints: true,
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
 
 // MultiSigWallet associations
-MultiSigWallet.belongsTo(User, { foreignKey: 'userId', as: 'user' });
-MultiSigWallet.belongsTo(Property, { foreignKey: 'propertyId', as: 'property' });
-MultiSigWallet.hasMany(MultiSigSigner, { foreignKey: 'multiSigWalletId', as: 'signers' });
-MultiSigWallet.hasMany(MultiSigTransaction, { foreignKey: 'multiSigWalletId', as: 'transactions' });
+MultiSigWallet.belongsTo(User, { 
+  foreignKey: 'userId', 
+  as: 'user',
+  constraints: true,
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
+
+MultiSigWallet.belongsTo(Property, { 
+  foreignKey: 'propertyId', 
+  as: 'property',
+  constraints: true,
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
+
+MultiSigWallet.hasMany(MultiSigSigner, { 
+  foreignKey: 'multiSigWalletId', 
+  as: 'signers',
+  constraints: true,
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
+
+MultiSigWallet.hasMany(MultiSigTransaction, { 
+  foreignKey: 'multiSigWalletId', 
+  as: 'transactions',
+  constraints: true,
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
 
 // MultiSigSigner associations
-MultiSigSigner.belongsTo(MultiSigWallet, { foreignKey: 'multiSigWalletId', as: 'wallet' });
-MultiSigSigner.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+MultiSigSigner.belongsTo(MultiSigWallet, { 
+  foreignKey: 'multiSigWalletId', 
+  as: 'wallet',
+  constraints: true,
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
+
+MultiSigSigner.belongsTo(User, { 
+  foreignKey: 'userId', 
+  as: 'user',
+  constraints: true,
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
 
 // MultiSigTransaction associations
-MultiSigTransaction.belongsTo(MultiSigWallet, { foreignKey: 'multiSigWalletId', as: 'wallet' });
+MultiSigTransaction.belongsTo(MultiSigWallet, { 
+  foreignKey: 'multiSigWalletId', 
+  as: 'wallet',
+  constraints: true,
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
 
-// Existing associations remain unchanged
-User.hasMany(PropertyHolding, { foreignKey: 'userId', as: 'holdings' });
+// PropertyHolding associations
+User.hasMany(PropertyHolding, { 
+  foreignKey: 'userId', 
+  as: 'holdings',
+  constraints: true,
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
 
-Property.hasMany(PropertyHolding, { foreignKey: 'propertyId', as: 'holdings' });
+Property.hasMany(PropertyHolding, { 
+  foreignKey: 'propertyId', 
+  as: 'holdings',
+  constraints: true,
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
 
-PropertyHolding.belongsTo(User, { foreignKey: 'userId', as: 'user' });
-PropertyHolding.belongsTo(Property, { foreignKey: 'propertyId', as: 'property' });
+PropertyHolding.belongsTo(User, { 
+  foreignKey: 'userId', 
+  as: 'user',
+  constraints: true,
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
 
-User.hasMany(RecoveryRequest, { foreignKey: 'userId', as: 'recoveryRequests' });
-User.hasMany(RecoveryRequest, { foreignKey: 'requestedBy', as: 'initiatedRecoveries' });
-MultiSigWallet.hasMany(RecoveryRequest, { foreignKey: 'walletId', as: 'recoveryRequests' });
+PropertyHolding.belongsTo(Property, { 
+  foreignKey: 'propertyId', 
+  as: 'property',
+  constraints: true,
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
 
-RecoveryRequest.belongsTo(User, { foreignKey: 'userId', as: 'user' });
-RecoveryRequest.belongsTo(User, { foreignKey: 'requestedBy', as: 'requestor' });
-RecoveryRequest.belongsTo(MultiSigWallet, { foreignKey: 'walletId', as: 'wallet' });
+// RecoveryRequest associations
+User.hasMany(RecoveryRequest, { 
+  foreignKey: 'userId', 
+  as: 'recoveryRequests',
+  constraints: true,
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
+
+User.hasMany(RecoveryRequest, { 
+  foreignKey: 'requestedBy', 
+  as: 'initiatedRecoveries',
+  constraints: true,
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
+
+MultiSigWallet.hasMany(RecoveryRequest, { 
+  foreignKey: 'walletId', 
+  as: 'recoveryRequests',
+  constraints: true,
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
+
+RecoveryRequest.belongsTo(User, { 
+  foreignKey: 'userId', 
+  as: 'user',
+  constraints: true,
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
+
+RecoveryRequest.belongsTo(User, { 
+  foreignKey: 'requestedBy', 
+  as: 'requestor',
+  constraints: true,
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
+
+RecoveryRequest.belongsTo(MultiSigWallet, { 
+  foreignKey: 'walletId', 
+  as: 'wallet',
+  constraints: true,
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
 
 // Recovery Audit Log associations
-RecoveryRequest.hasMany(RecoveryAuditLog, { foreignKey: 'recoveryRequestId', as: 'auditLogs' });
-RecoveryAuditLog.belongsTo(RecoveryRequest, { foreignKey: 'recoveryRequestId', as: 'recoveryRequest' });
-RecoveryAuditLog.belongsTo(User, { foreignKey: 'performedBy', as: 'performer' });
+RecoveryRequest.hasMany(RecoveryAuditLog, { 
+  foreignKey: 'recoveryRequestId', 
+  as: 'auditLogs',
+  constraints: true,
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
 
+RecoveryAuditLog.belongsTo(RecoveryRequest, { 
+  foreignKey: 'recoveryRequestId', 
+  as: 'recoveryRequest',
+  constraints: true,
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
+
+RecoveryAuditLog.belongsTo(User, { 
+  foreignKey: 'performedBy', 
+  as: 'performer',
+  constraints: true,
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
+
+export default {
+  User,
+  Property,
+  MultiSigWallet,
+  MultiSigSigner,
+  MultiSigTransaction,
+  PropertyHolding,
+  RecoveryRequest,
+  RecoveryAuditLog
+};

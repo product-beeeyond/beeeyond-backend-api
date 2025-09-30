@@ -82,18 +82,12 @@ RecoveryRequest.init(
     userId: {
       type: DataTypes.UUID,
       allowNull: false,
-      references: {
-        model: 'users',
-        key: 'id',
-      },
+      // Removed references - handled by associations
     },
     walletId: {
       type: DataTypes.UUID,
       allowNull: false,
-      references: {
-        model: 'multisig_wallets',
-        key: 'id',
-      },
+      // Removed references - handled by associations
     },
     requestReason: {
       type: DataTypes.TEXT,
@@ -157,10 +151,7 @@ RecoveryRequest.init(
     executedBy: {
       type: DataTypes.UUID,
       allowNull: true,
-      references: {
-        model: 'users',
-        key: 'id',
-      },
+      // Removed references - handled by associations
     },
     executedAt: {
       type: DataTypes.DATE,
@@ -184,10 +175,7 @@ RecoveryRequest.init(
     requestedBy: {
       type: DataTypes.UUID,
       allowNull: false,
-      references: {
-        model: 'users',
-        key: 'id',
-      },
+      // Removed references - handled by associations
     },
     metadata: {
       type: DataTypes.JSONB,
