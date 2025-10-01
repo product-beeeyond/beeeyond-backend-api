@@ -762,7 +762,7 @@ class StellarService {
       let fundingRequired = false;
 
       // Testnet funding logic (unchanged)
-     if (STELLAR_NETWORK === "testnet") {
+      if (STELLAR_NETWORK === "testnet") {
         await this.server.friendbot(walletKeypair.publicKey()).call();
         await this.sleep(2000);
 
@@ -967,9 +967,11 @@ class StellarService {
         wallet.id,
         "master_key"
       );
-
+      console.log("walletKeeypair--------:  ", walletKeypair);
       // Get signer public keys from signers
       const signers = wallet.signers || [];
+      console.log("signers-------:  ", signers);
+
       const secondarySigner = signers.find(
         (s) => s.role === "platform_secondary"
       );
@@ -1449,9 +1451,9 @@ class StellarService {
       const propertyManagerKey =
         await secureWalletService.getKeypairFromStorage(
           propertyManagerWallet.id,
-          "user" 
+          "user"
         );
-        
+
       // Calculate reserves: Base + signers + expected trustlines
       const additionalSigners = 2;
       const expectedTrustlines = 2; // Property token + NGN
