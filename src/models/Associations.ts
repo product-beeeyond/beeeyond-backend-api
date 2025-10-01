@@ -6,6 +6,7 @@ import MultiSigTransaction from './MultiSigTransaction';
 import PropertyHolding from './PropertyHolding';
 import RecoveryRequest from './RecoveryRequest';
 import RecoveryAuditLog from './RecoveryAuditLog';
+import EncryptedSecret from './EncryptedSecret';
 
 // User associations
 User.hasMany(MultiSigWallet, { 
@@ -66,6 +67,14 @@ MultiSigWallet.hasMany(MultiSigTransaction, {
   onUpdate: 'CASCADE'
 });
 
+MultiSigWallet.hasMany(EncryptedSecret, { 
+  foreignKey: 'walletId', 
+  as: 'encryptedSecrets',
+  constraints: true,
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
+
 // MultiSigSigner associations
 MultiSigSigner.belongsTo(MultiSigWallet, { 
   foreignKey: 'multiSigWalletId', 
@@ -86,6 +95,15 @@ MultiSigSigner.belongsTo(User, {
 // MultiSigTransaction associations
 MultiSigTransaction.belongsTo(MultiSigWallet, { 
   foreignKey: 'multiSigWalletId', 
+  as: 'wallet',
+  constraints: true,
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
+
+// EncryptedSecret associations
+EncryptedSecret.belongsTo(MultiSigWallet, { 
+  foreignKey: 'walletId', 
   as: 'wallet',
   constraints: true,
   onDelete: 'CASCADE',
@@ -207,5 +225,6 @@ export default {
   MultiSigTransaction,
   PropertyHolding,
   RecoveryRequest,
-  RecoveryAuditLog
+  RecoveryAuditLog,
+  EncryptedSecret
 };

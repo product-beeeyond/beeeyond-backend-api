@@ -199,16 +199,18 @@ export const createPlatformTreasury = async (
       where: { walletType: "platform_treasury" },
     });
 
-    // if (existingTreasury) {.              //deprecated. atomic implemetation now in stellar service
-    //   return res.status(400).json({
-    //     error: 'Platform treasury wallet already exists',
-    //     publicKey: existingTreasury.stellarPublicKey,
-    //     status: existingTreasury.status,
-    //     message: existingTreasury.status === 'awaiting_funding'
-    //       ? 'Treasury exists but needs funding. Check funding status and finalize setup.'
-    //       : 'Treasury is already active.'
-    //   });
-    // }
+    if (existingTreasury) {
+      //deprecated. atomic implemetation now in stellar service
+      return res.status(400).json({
+        error: "Platform treasury wallet already exists",
+        publicKey: existingTreasury.stellarPublicKey,
+        status: existingTreasury.status,
+        message:
+          existingTreasury.status === "awaiting_funding"
+            ? "Treasury exists but needs funding. Check funding status and finalize setup."
+            : "Treasury is already active.",
+      });
+    }
 
     // Phase 1: Create treasury wallet
     const treasuryResult = await stellarService.createPlatformTreasuryWallet({
@@ -706,94 +708,6 @@ export const listUserWallets = async (req: AuthRequest, res: Response) => {
 //     logger.error('Create user multisig wallet error:', error);
 //     res.status(500).json({
 //       error: 'Failed to create recovery wallet',
-//       details: error instanceof Error ? error.message : 'Unknown error'
-//     });
-//   }
-// };
-
-// // ===========================================
-// // PLATFORM MULTISIG WALLETS (Treasury, Issuer, etc.)
-// // ===========================================
-
-// export const createPlatformWallets = async (req: AuthRequest, res: Response) => {
-//   try {
-//     // Only super admin can create platform wallets
-//     if (req.user!.role !== 'super_admin') {
-//       return res.status(403).json({ error: 'Super admin access required' });
-//     }
-
-//     const { walletType, description } = req.body;
-
-//     if (!walletType || !['treasury', 'issuer', 'distribution', 'fee_collection'].includes(walletType)) {
-//       return res.status(400).json({
-//         error: 'Invalid wallet type. Must be: treasury, issuer, distribution, or fee_collection'
-//       });
-//     }
-
-//     // Check if platform wallet already exists
-//     const existingWallet = await MultiSigWallet.findOne({
-//       where: { walletType: `platform_${walletType}` }
-//     });
-
-//     if (existingWallet) {
-//       return res.status(400).json({
-//         error: `Platform ${walletType} wallet already exists`,
-//         publicKey: existingWallet.stellarPublicKey
-//       });
-//     }
-
-//     let walletResult;
-
-//     switch (walletType) {
-//       case 'treasury':
-//         walletResult = await stellarService.createPlatformTreasuryWallet({
-//           description: description || 'Main platform treasury for funding operations',
-//           createdBy: req.user!.id
-//         });
-//         break;
-
-//       case 'issuer':
-//         walletResult = await stellarService.createPlatformIssuerWallet({
-//           description: description || 'Asset issuer for property tokens',
-//           createdBy: req.user!.id
-//         });
-//         break;
-
-//       // case 'distribution':
-//       //   walletResult = await stellarService.createPlatformDistributionWallet({
-//       //     description: description || 'Main distribution wallet for token sales',
-//       //     createdBy: req.user!.id
-//       //   });
-//       //   break;
-
-//       // case 'fee_collection':
-//       //   walletResult = await stellarService.createPlatformFeeCollectionWallet({
-//       //     description: description || 'Platform fee collection wallet',
-//       //     createdBy: req.user!.id
-//       //   });
-//       //   break;
-
-//       default:
-//         throw new Error('Invalid wallet type');
-//     }
-
-//     logger.info(`Platform ${walletType} wallet created: ${walletResult.publicKey}`);
-
-//     res.status(201).json({
-//       message: `Platform ${walletType} wallet created successfully`,
-//       wallet: {
-//         type: `platform_${walletType}`,
-//         publicKey: walletResult.publicKey,
-//         walletId: walletResult.walletId,
-//         signers: walletResult.signers,
-//         thresholds: walletResult.thresholds
-//       }
-//     });
-
-//   } catch (error) {
-//     logger.error('Create platform wallet error:', error);
-//     res.status(500).json({
-//       error: 'Failed to create platform wallet',
 //       details: error instanceof Error ? error.message : 'Unknown error'
 //     });
 //   }

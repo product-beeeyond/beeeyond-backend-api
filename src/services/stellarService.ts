@@ -762,10 +762,29 @@ class StellarService {
       let fundingRequired = false;
 
       // Testnet funding logic (unchanged)
-      if (STELLAR_NETWORK === "testnet") {
+     if (STELLAR_NETWORK === "testnet") {
         await this.server.friendbot(walletKeypair.publicKey()).call();
         await this.sleep(2000);
-        // ... existing testnet logic
+
+        const account = await this.server.loadAccount(
+          walletKeypair.publicKey()
+        );
+        const xlmBalance = account.balances.find(
+          (b) => b.asset_type === "native"
+        );
+        const currentBalance = parseFloat(xlmBalance?.balance || "0");
+
+        if (currentBalance < parseFloat(requiredBalance)) {
+          const additionalFunding = (
+            parseFloat(requiredBalance) -
+            currentBalance +
+            1
+          ).toFixed(7);
+          await this.fundWalletFromTreasury(
+            walletKeypair.publicKey(),
+            additionalFunding
+          );
+        }
       } else {
         fundingRequired = true;
         logger.warn(
@@ -1430,7 +1449,7 @@ class StellarService {
       const propertyManagerKey =
         await secureWalletService.getKeypairFromStorage(
           propertyManagerWallet.id,
-          "user" // or the appropriate role for the property manager
+          "user" 
         );
         
       // Calculate reserves: Base + signers + expected trustlines
