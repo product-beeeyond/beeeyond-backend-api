@@ -12,7 +12,7 @@ import {
   FeeBumpTransaction,
 } from "@stellar/stellar-sdk";
 import logger from "../utils/logger";
-import { encrypt, decrypt } from "../utils/cypher";
+import { decrypt } from "../utils/cypher";
 import MultiSigWallet from "../models/MultiSigWallet";
 import MultiSigSigner, {
   MultiSigSignerAttributes,
@@ -45,7 +45,7 @@ interface PlatformWalletParams {
 interface PropertyWalletParams {
   propertyId: string;
   propertyTitle: string;
-  propertyManager?: Keypair;
+  propertyManagerPublicKey?: string;
   createdBy: string;
 }
 
@@ -87,6 +87,100 @@ class StellarService {
       this._platformKeypairs.set(keyType, keypair);
     }
     return this._platformKeypairs.get(keyType)!;
+  }
+  /**
+   * Get or generate batched platform recovery key (1000 wallets per batch)
+   * This method manages recovery keys in batches to balance security and operational complexity
+   */
+  private async getBatchedRecoveryKey(): Promise<{
+    keypair: Keypair;
+    publicKey: () => string;
+    secret: () => string;
+    batchId: string;
+  }> {
+    try {
+      // Count total user wallets created
+      const totalUserWallets = await MultiSigWallet.count({
+        where: {
+          walletType: "user_recovery",
+          status: "active",
+        },
+      });
+
+      // Calculate current batch number (0-indexed)
+      const currentBatch = Math.floor(totalUserWallets / 1000);
+      const batchId = `recovery_batch_${currentBatch}`;
+
+      // Check if current batch recovery key already exists
+      // let existingBatchKey = null;
+      try {
+        const existingKeypair = await secureWalletService.retrieveWalletSecret(
+          "platform-global", // Use global context for batch keys
+          batchId
+        );
+
+        if (existingKeypair) {
+          const keypair = Keypair.fromSecret(existingKeypair);
+          logger.info(
+            `Using existing recovery batch ${currentBatch} for wallet ${
+              totalUserWallets + 1
+            }`
+          );
+
+          return {
+            keypair,
+            publicKey: () => keypair.publicKey(),
+            secret: () => keypair.secret(),
+            batchId,
+          };
+        }
+      } catch (error) {
+        // Key doesn't exist yet, will create new one below
+        logger.info(
+          `Recovery batch ${currentBatch} not found, creating new batch key`
+        );
+      }
+
+      // Generate new recovery key for this batch
+      const newBatchKeypair = Keypair.random();
+
+      // Store the new batch key globally
+      await secureWalletService.storeWalletSecret(
+        "platform-global",
+        batchId,
+        newBatchKeypair.secret(),
+        {
+          publicKey: newBatchKeypair.publicKey(),
+          role: "platform_recovery_batch",
+          batchNumber: String(currentBatch),
+          batchSize: String(1000),
+          createdAt: new Date().toISOString(),
+          description: `Platform recovery key for wallets ${
+            currentBatch * 1000
+          } to ${(currentBatch + 1) * 1000 - 1}`,
+        }
+      );
+
+      logger.info(
+        `Created new recovery batch ${currentBatch} for wallets ${
+          currentBatch * 1000
+        }-${(currentBatch + 1) * 1000 - 1}`
+      );
+
+      return {
+        keypair: newBatchKeypair,
+        publicKey: () => newBatchKeypair.publicKey(),
+        secret: () => newBatchKeypair.secret(),
+        batchId,
+      };
+    } catch (error) {
+      logger.error("Error managing batched recovery key:", error);
+      throw new Error(
+        `Failed to get/create batched recovery key: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+    }
   }
   constructor() {
     this.validateEnvironmentVariables();
@@ -307,11 +401,89 @@ class StellarService {
   // ===========================================
   // ENHANCED WALLET CREATION WITH PROPER RESERVES
   // ===========================================
+  /**
+   * Get recovery keypair for a specific wallet (helper for recovery operations)
+   */
+  async getRecoveryKeypairForWallet(walletPublicKey: string): Promise<Keypair> {
+    try {
+      // Find the wallet and its recovery signer
+      const wallet = await MultiSigWallet.findOne({
+        where: { stellarPublicKey: walletPublicKey },
+        include: [
+          {
+            model: MultiSigSigner,
+            as: "signers",
+            where: {
+              role: "platform_recovery",
+              status: "active",
+            },
+          },
+        ],
+      });
+
+      if (!wallet || !wallet.signers?.[0]) {
+        throw new Error("Recovery signer not found for wallet");
+      }
+
+      const recoverySignerSecretId = wallet.signers[0].encryptedSecretId;
+      if (!recoverySignerSecretId) {
+        throw new Error("Recovery signer secret ID not found");
+      }
+
+      // Retrieve the recovery keypair
+      const secret = await secureWalletService.retrieveWalletSecret(
+        wallet.id,
+        "platform_recovery_batch"
+      );
+
+      return Keypair.fromSecret(secret);
+    } catch (error) {
+      logger.error("Error getting recovery keypair for wallet:", error);
+      throw error;
+    }
+  }
 
   /**
-   * Create a 1-of-2 multisig wallet for user with proper reserve calculation
+   * Get statistics about recovery key batches
+   */
+  async getRecoveryBatchStats(): Promise<{
+    totalBatches: number;
+    currentBatch: number;
+    walletsInCurrentBatch: number;
+    walletsUntilNextBatch: number;
+  }> {
+    try {
+      const totalUserWallets = await MultiSigWallet.count({
+        where: {
+          walletType: "user_recovery",
+          status: "active",
+        },
+      });
+
+      const currentBatch = Math.floor(totalUserWallets / 1000);
+      const walletsInCurrentBatch = totalUserWallets % 1000;
+      const walletsUntilNextBatch = 1000 - walletsInCurrentBatch;
+      const totalBatches = currentBatch + 1;
+
+      return {
+        totalBatches,
+        currentBatch,
+        walletsInCurrentBatch: walletsInCurrentBatch || 1000, // If exactly 1000, show 1000 not 0
+        walletsUntilNextBatch:
+          walletsUntilNextBatch === 1000 ? 0 : walletsUntilNextBatch,
+      };
+    } catch (error) {
+      logger.error("Error getting recovery batch stats:", error);
+      throw error;
+    }
+  }
+  /**
+   * Create a 2-of-3 multisig wallet for user
    */
   async createUserMultiSigWallet(params: UserWalletParams) {
+    let multiSigWallet: any = null;
+    const createdSecrets: string[] = [];
+
     try {
       const { userId, userEmail, userName } = params;
 
@@ -320,9 +492,9 @@ class StellarService {
       const walletKeypair = Keypair.random();
 
       // Calculate required balance for user wallet
-      // Base + 2 additional signers (user + platform recovery)
+      // Base + 3 additional signers (user + 2 platform keys)
       const requiredBalance = this.calculateMinimumBalance({
-        additionalSigners: 2,
+        additionalSigners: 3,
         trustlines: 0, // Will add trustlines later as needed
       });
 
@@ -361,38 +533,51 @@ class StellarService {
       // Load the account
       const account = await this.server.loadAccount(walletKeypair.publicKey());
 
-      // Create multisig transaction following SEP-30
+      // Get or generate batched platform recovery key (1000 wallets per batch)
+      const batchRecoveryInfo = await this.getBatchedRecoveryKey();
+      const currentBatchRecoveryKey = batchRecoveryInfo.keypair;
+
+      // Create multisig transaction with 2-of-3 setup
       const transaction = new TransactionBuilder(account, {
         fee: BASE_FEE,
         networkPassphrase: this.network,
       })
-        // Add user as signer (weight 2)
+        // Add user as primary signer (weight 2)
         .addOperation(
           Operation.setOptions({
             signer: {
               ed25519PublicKey: userKeypair.publicKey(),
-              weight: MULTISIG_CONFIG.USER_RECOVERY.USER_WEIGHT,
+              weight: 2, // User can make payments alone
             },
           })
         )
-        // Add platform recovery key as signer (weight 1)
+        // Add platform primary key as signer (weight 1)
         .addOperation(
           Operation.setOptions({
             signer: {
               ed25519PublicKey: (
-                await this.getPlatformKeypair("recovery")
+                await this.getPlatformKeypair("platform")
               ).publicKey(),
-              weight: MULTISIG_CONFIG.USER_RECOVERY.PLATFORM_WEIGHT,
+              weight: 1, // Platform key 1
             },
           })
         )
-        // Set thresholds: 1-of-2 (either user OR platform can sign)
+        // Add platform recovery key as second platform signer (weight 1)
         .addOperation(
           Operation.setOptions({
-            lowThreshold: MULTISIG_CONFIG.USER_RECOVERY.LOW_THRESHOLD, // 1 - payments, offers
-            medThreshold: MULTISIG_CONFIG.USER_RECOVERY.MEDIUM_THRESHOLD, // 2 - account management
-            highThreshold: MULTISIG_CONFIG.USER_RECOVERY.HIGH_THRESHOLD, // 2 - critical operations
-            masterWeight: MULTISIG_CONFIG.USER_RECOVERY.MASTER_WEIGHT,
+            signer: {
+              ed25519PublicKey: currentBatchRecoveryKey.publicKey(),
+              weight: 1, // Platform key 2
+            },
+          })
+        )
+        // Set thresholds for 2-of-3 control
+        .addOperation(
+          Operation.setOptions({
+            lowThreshold: 2, // User alone (weight 2) can make payments
+            medThreshold: 2, // User alone OR two platform keys (1+1=2) for account changes
+            highThreshold: 2, // User alone OR two platform keys for critical operations
+            masterWeight: 0, // Disable master key
           })
         )
         .setTimeout(180)
@@ -408,14 +593,14 @@ class StellarService {
       );
 
       // Store wallet in database
-      const multiSigWallet = await MultiSigWallet.create({
+      multiSigWallet = await MultiSigWallet.create({
         userId,
         stellarPublicKey: walletKeypair.publicKey(),
         walletType: "user_recovery",
-        lowThreshold: MULTISIG_CONFIG.USER_RECOVERY.LOW_THRESHOLD,
-        mediumThreshold: MULTISIG_CONFIG.USER_RECOVERY.MEDIUM_THRESHOLD,
-        highThreshold: MULTISIG_CONFIG.USER_RECOVERY.HIGH_THRESHOLD,
-        masterWeight: MULTISIG_CONFIG.USER_RECOVERY.MASTER_WEIGHT,
+        lowThreshold: 2,
+        mediumThreshold: 2,
+        highThreshold: 2,
+        masterWeight: 0,
         status: "active",
         createdTxHash: result.hash,
         metadata: {
@@ -438,17 +623,35 @@ class StellarService {
           userEmail: userEmail,
         }
       );
-      // Store platform recovery key in KMS
-      const recoverySecretId = await secureWalletService.storeWalletSecret(
+      createdSecrets.push(userSecretId);
+
+      // Store platform primary key in KMS
+      const platformSecretId = await secureWalletService.storeWalletSecret(
         multiSigWallet.id,
-        "platform_recovery",
-        (await this.getPlatformKeypair("recovery")).secret(),
+        "platform_primary",
+        (await this.getPlatformKeypair("platform")).secret(),
         {
-          publicKey: (await this.getPlatformKeypair("recovery")).publicKey(),
-          role: "platform_recovery",
+          publicKey: (await this.getPlatformKeypair("platform")).publicKey(),
+          role: "platform_primary",
           walletType: "user_recovery",
         }
       );
+      createdSecrets.push(platformSecretId);
+
+      // Store batched platform recovery key reference for this user wallet
+      const platformRecoverySecretId =
+        await secureWalletService.storeWalletSecret(
+          multiSigWallet.id,
+          "platform_recovery_batch",
+          currentBatchRecoveryKey.secret(),
+          {
+            publicKey: currentBatchRecoveryKey.publicKey(),
+            role: "platform_recovery",
+            walletType: "user_recovery",
+            batchId: batchRecoveryInfo.batchId,
+          }
+        );
+      createdSecrets.push(platformRecoverySecretId);
 
       // Store signers
       await Promise.all([
@@ -456,21 +659,24 @@ class StellarService {
           multiSigWalletId: multiSigWallet.id,
           userId: userId,
           publicKey: userKeypair.publicKey(),
-          weight: MULTISIG_CONFIG.USER_RECOVERY.USER_WEIGHT, // 2
+          weight: 2, // User can make payments alone
           role: "user",
           status: "active",
-          // Store encrypted private key for user (they can recover with password). i don't think this is secure!
-          // encryptedPrivateKey: encrypt(
-          //   userKeypair.secret(),
-          //   userEmail + userId
-          // ),
           encryptedSecretId: userSecretId,
         }),
         MultiSigSigner.create({
           multiSigWalletId: multiSigWallet.id,
-          publicKey: (await this.getPlatformKeypair("recovery")).publicKey(),
-          encryptedSecretId: recoverySecretId,
-          weight: MULTISIG_CONFIG.USER_RECOVERY.PLATFORM_WEIGHT, // 1
+          publicKey: (await this.getPlatformKeypair("platform")).publicKey(),
+          encryptedSecretId: platformSecretId,
+          weight: 1, // Platform key 1
+          role: "platform_primary",
+          status: "active",
+        }),
+        MultiSigSigner.create({
+          multiSigWalletId: multiSigWallet.id,
+          publicKey: currentBatchRecoveryKey.publicKey(),
+          encryptedSecretId: platformRecoverySecretId,
+          weight: 1, // Platform key 2
           role: "platform_recovery",
           status: "active",
         }),
@@ -490,13 +696,40 @@ class StellarService {
         },
         canRecover: true,
         thresholds: {
-          low: MULTISIG_CONFIG.USER_RECOVERY.LOW_THRESHOLD,
-          medium: MULTISIG_CONFIG.USER_RECOVERY.MEDIUM_THRESHOLD,
-          high: MULTISIG_CONFIG.USER_RECOVERY.HIGH_THRESHOLD,
+          low: 2,
+          medium: 2,
+          high: 2,
         },
       };
     } catch (error) {
       logger.error("Error creating user wallet:", error);
+
+      // Clean up created records if wallet creation failed
+      if (multiSigWallet?.id) {
+        try {
+          // Delete signers
+          await MultiSigSigner.destroy({
+            where: { multiSigWalletId: multiSigWallet.id },
+          });
+
+          // Delete encrypted secrets
+          if (createdSecrets.length > 0) {
+            await EncryptedSecret.destroy({
+              where: { id: { [Op.in]: createdSecrets } },
+            });
+          }
+
+          // Delete wallet record
+          await multiSigWallet.destroy();
+
+          logger.info(
+            `Cleaned up failed user wallet creation: ${multiSigWallet.id}`
+          );
+        } catch (cleanupError) {
+          logger.error("Error during user wallet cleanup:", cleanupError);
+        }
+      }
+
       throw new Error(
         `Failed to create user wallet: ${
           error instanceof Error ? error.message : "Unknown error"
@@ -532,7 +765,26 @@ class StellarService {
       if (STELLAR_NETWORK === "testnet") {
         await this.server.friendbot(walletKeypair.publicKey()).call();
         await this.sleep(2000);
-        // ... existing testnet logic
+
+        const account = await this.server.loadAccount(
+          walletKeypair.publicKey()
+        );
+        const xlmBalance = account.balances.find(
+          (b) => b.asset_type === "native"
+        );
+        const currentBalance = parseFloat(xlmBalance?.balance || "0");
+
+        if (currentBalance < parseFloat(requiredBalance)) {
+          const additionalFunding = (
+            parseFloat(requiredBalance) -
+            currentBalance +
+            1
+          ).toFixed(7);
+          await this.fundWalletFromTreasury(
+            walletKeypair.publicKey(),
+            additionalFunding
+          );
+        }
       } else {
         fundingRequired = true;
         logger.warn(
@@ -715,9 +967,11 @@ class StellarService {
         wallet.id,
         "master_key"
       );
-
+      console.log("walletKeeypair--------:  ", walletKeypair);
       // Get signer public keys from signers
       const signers = wallet.signers || [];
+      console.log("signers-------:  ", signers);
+
       const secondarySigner = signers.find(
         (s) => s.role === "platform_secondary"
       );
@@ -896,6 +1150,9 @@ class StellarService {
    * Create platform asset issuer wallet (1-of-2 for operational efficiency) with fee bump sponsorship
    */
   async createPlatformIssuerWallet(params: PlatformWalletParams) {
+    let multiSigWallet: any = null;
+    const createdSecrets: string[] = [];
+
     try {
       const walletKeypair = Keypair.random();
       const backupKey = Keypair.random();
@@ -980,7 +1237,8 @@ class StellarService {
         walletKeypair
       );
 
-      const multiSigWallet = await MultiSigWallet.create({
+      // Create wallet record
+      multiSigWallet = await MultiSigWallet.create({
         stellarPublicKey: walletKeypair.publicKey(),
         walletType: "platform_issuer",
         lowThreshold: MULTISIG_CONFIG.PLATFORM_ISSUER.LOW_THRESHOLD,
@@ -993,9 +1251,37 @@ class StellarService {
           description: params.description,
           createdBy: params.createdBy,
           initialBalance: requiredBalance,
+          createdAt: new Date().toISOString(),
         },
       });
 
+      // Store platform primary key in KMS
+      const platformSecretId = await secureWalletService.storeWalletSecret(
+        multiSigWallet.id,
+        "platform_primary",
+        (await this.getPlatformKeypair("platform")).secret(),
+        {
+          publicKey: (await this.getPlatformKeypair("platform")).publicKey(),
+          role: "platform_issuer",
+          walletType: "platform_issuer",
+        }
+      );
+      createdSecrets.push(platformSecretId);
+
+      // Store backup key in KMS
+      const backupSecretId = await secureWalletService.storeWalletSecret(
+        multiSigWallet.id,
+        "issuer_backup",
+        backupKey.secret(),
+        {
+          publicKey: backupKey.publicKey(),
+          role: "issuer_backup",
+          walletType: "platform_issuer",
+        }
+      );
+      createdSecrets.push(backupSecretId);
+
+      // Create signer records
       await Promise.all([
         MultiSigSigner.create({
           multiSigWalletId: multiSigWallet.id,
@@ -1003,6 +1289,7 @@ class StellarService {
           weight: MULTISIG_CONFIG.PLATFORM_ISSUER.PRIMARY_WEIGHT, // 2
           role: "platform_issuer",
           status: "active",
+          encryptedSecretId: platformSecretId,
         }),
         MultiSigSigner.create({
           multiSigWalletId: multiSigWallet.id,
@@ -1010,12 +1297,13 @@ class StellarService {
           weight: MULTISIG_CONFIG.PLATFORM_ISSUER.BACKUP_WEIGHT, // 1
           role: "issuer_backup",
           status: "active",
-          encryptedPrivateKey: encrypt(
-            backupKey.secret(),
-            "platform_issuer_backup"
-          ),
+          encryptedSecretId: backupSecretId,
         }),
       ]);
+
+      logger.info(
+        `Platform issuer wallet created: ${walletKeypair.publicKey()} with ${requiredBalance} XLM`
+      );
 
       return {
         publicKey: walletKeypair.publicKey(),
@@ -1036,7 +1324,41 @@ class StellarService {
       };
     } catch (error) {
       logger.error("Error creating platform issuer wallet:", error);
-      throw error;
+
+      // Clean up created records if wallet creation failed
+      if (multiSigWallet?.id) {
+        try {
+          // Delete signers
+          await MultiSigSigner.destroy({
+            where: { multiSigWalletId: multiSigWallet.id },
+          });
+
+          // Delete encrypted secrets
+          if (createdSecrets.length > 0) {
+            await EncryptedSecret.destroy({
+              where: { id: { [Op.in]: createdSecrets } },
+            });
+          }
+
+          // Delete wallet record
+          await multiSigWallet.destroy();
+
+          logger.info(
+            `Cleaned up failed platform issuer wallet creation: ${multiSigWallet.id}`
+          );
+        } catch (cleanupError) {
+          logger.error(
+            "Error during platform issuer wallet cleanup:",
+            cleanupError
+          );
+        }
+      }
+
+      throw new Error(
+        `Failed to create platform issuer wallet: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
     }
   }
   /**
@@ -1106,333 +1428,506 @@ class StellarService {
    * Enhanced property wallet creation with trustline reserves
    */
   private async createPropertyDistributionWallet(params: PropertyWalletParams) {
-    const walletKeypair = Keypair.random();
-    const propertyManagerKey = params?.propertyManager;
-    if (!propertyManagerKey) {
-      throw new Error("propertyManagerKey is required");
-    }
-    // Calculate reserves: Base + signers + expected trustlines
-    const additionalSigners = 2;
-    const expectedTrustlines = 2; // Property token + NGN
+    let multiSigWallet: any = null;
+    const createdSecrets: string[] = [];
 
-    const requiredBalance = this.calculateMinimumBalance({
-      additionalSigners,
-      trustlines: expectedTrustlines,
-    });
-
-    if (STELLAR_NETWORK === "testnet") {
-      await this.server.friendbot(walletKeypair.publicKey()).call();
-      await this.sleep(2000);
-
-      // Ensure sufficient balance
-      const account = await this.server.loadAccount(walletKeypair.publicKey());
-      const xlmBalance = account.balances.find(
-        (b) => b.asset_type === "native"
-      );
-      const currentBalance = parseFloat(xlmBalance?.balance || "0");
-
-      if (currentBalance < parseFloat(requiredBalance)) {
-        const additionalFunding = (
-          parseFloat(requiredBalance) -
-          currentBalance +
-          1
-        ).toFixed(7);
-        await this.fundWalletFromTreasury(
-          walletKeypair.publicKey(),
-          additionalFunding
-        );
+    try {
+      const walletKeypair = Keypair.random();
+      // Get property manager keypair from database
+      if (!params.propertyManagerPublicKey) {
+        throw new Error("propertyManagerPublicKey is required");
       }
-    } else {
-      await this.fundWalletFromTreasury(
-        walletKeypair.publicKey(),
-        requiredBalance
-      );
-    }
-
-    const account = await this.server.loadAccount(walletKeypair.publicKey());
-
-    // Create transaction builder
-    const transactionBuilder = new TransactionBuilder(account, {
-      fee: BASE_FEE,
-      networkPassphrase: this.network,
-    });
-
-    // Add platform as primary signer
-    transactionBuilder.addOperation(
-      Operation.setOptions({
-        signer: {
-          ed25519PublicKey: (
-            await this.getPlatformKeypair("platform")
-          ).publicKey(),
-          weight: MULTISIG_CONFIG.PROPERTY_DISTRIBUTION.PLATFORM_WEIGHT, // 2
-        },
-      })
-    );
-
-    // Add property manager 
-    transactionBuilder.addOperation(
-      Operation.setOptions({
-        signer: {
-          ed25519PublicKey: propertyManagerKey.publicKey(),
-          weight: MULTISIG_CONFIG.PROPERTY_DISTRIBUTION.PROPERTY_MANAGER_WEIGHT, // 1
-        },
-      })
-    );
-
-    // Set thresholds
-    transactionBuilder.addOperation(
-      Operation.setOptions({
-        lowThreshold: MULTISIG_CONFIG.PROPERTY_DISTRIBUTION.LOW_THRESHOLD, // 1 - either platform or property manager
-        medThreshold: MULTISIG_CONFIG.PROPERTY_DISTRIBUTION.MEDIUM_THRESHOLD, // 2 - both required for account changes
-        highThreshold: MULTISIG_CONFIG.PROPERTY_DISTRIBUTION.HIGH_THRESHOLD, // 2 - both required for critical ops
-        masterWeight: MULTISIG_CONFIG.PROPERTY_DISTRIBUTION.MASTER_WEIGHT, // 0
-      })
-    );
-
-    const transaction = transactionBuilder.setTimeout(180).build();
-    transaction.sign(walletKeypair);
-
-    // Submit transaction with fee bump sponsorship
-    const result = await this.submitTransactionWithFeeBump(
-      transaction,
-      walletKeypair
-    );
-
-    const multiSigWallet = await MultiSigWallet.create({
-      propertyId: params.propertyId,
-      stellarPublicKey: walletKeypair.publicKey(),
-      walletType: "property_distribution",
-      lowThreshold: MULTISIG_CONFIG.PROPERTY_DISTRIBUTION.LOW_THRESHOLD,
-      mediumThreshold: MULTISIG_CONFIG.PROPERTY_DISTRIBUTION.MEDIUM_THRESHOLD,
-      highThreshold: MULTISIG_CONFIG.PROPERTY_DISTRIBUTION.HIGH_THRESHOLD,
-      masterWeight: MULTISIG_CONFIG.PROPERTY_DISTRIBUTION.MASTER_WEIGHT,
-      status: "active",
-      createdTxHash: result.hash,
-      metadata: {
-        propertyTitle: params.propertyTitle,
-        createdBy: params.createdBy,
-        initialBalance: requiredBalance,
-        purpose: "Holds property tokens for distribution to investors",
-      },
-    });
-
-    // Store signers
-    const signerPromises = [
-      MultiSigSigner.create({
-        multiSigWalletId: multiSigWallet.id,
-        publicKey: (await this.getPlatformKeypair("platform")).publicKey(),
-        weight: MULTISIG_CONFIG.PROPERTY_DISTRIBUTION.PLATFORM_WEIGHT, // 2
-        role: "platform_distribution",
-        status: "active",
-      }),
-    ];
-
-    if (propertyManagerKey) {
-      signerPromises.push(
-        MultiSigSigner.create({
-          multiSigWalletId: multiSigWallet.id,
-          publicKey: propertyManagerKey.publicKey(),
-          weight: MULTISIG_CONFIG.PROPERTY_DISTRIBUTION.PROPERTY_MANAGER_WEIGHT, // 1,
-          role: "property_manager",
+      // Find the property manager's wallet in the database
+      const propertyManagerWallet = await MultiSigWallet.findOne({
+        where: {
+          stellarPublicKey: params.propertyManagerPublicKey,
           status: "active",
-          encryptedPrivateKey: encrypt(
-            propertyManagerKey.secret(),
-            `prop_${params.propertyId}_mgr`
-          ),
-        })
-      );
-    }
-
-    await Promise.all(signerPromises);
-
-    logger.info(
-      `Property distribution wallet created: ${walletKeypair.publicKey()} with ${requiredBalance} XLM`
-    );
-
-    return {
-      publicKey: walletKeypair.publicKey(),
-      walletId: multiSigWallet.id,
-      initialBalance: requiredBalance,
-      signers: [
-        {
-          publicKey: (await this.getPlatformKeypair("platform")).publicKey(),
-          role: "platform_distribution",
         },
-        ...(propertyManagerKey
-          ? [
-              {
-                publicKey: propertyManagerKey.publicKey(),
-                role: "property_manager",
-              },
-            ]
-          : []),
-      ],
-      thresholds: {
-        low: MULTISIG_CONFIG.PROPERTY_DISTRIBUTION.LOW_THRESHOLD,
-        medium: MULTISIG_CONFIG.PROPERTY_DISTRIBUTION.MEDIUM_THRESHOLD,
-        high: MULTISIG_CONFIG.PROPERTY_DISTRIBUTION.HIGH_THRESHOLD,
-      },
-    };
-  }
-  /**
-   * Create property governance wallet with proper reserves
-   */
-  private async createPropertyGovernanceWallet(params: PropertyWalletParams) {
-    const walletKeypair = Keypair.random();
-    const governanceKey = Keypair.random();
+      });
+      if (!propertyManagerWallet) {
+        throw new Error("Property manager wallet not found");
+      }
 
-    // Calculate reserves: Base + 3 signers + potential trustlines
-    const requiredBalance = this.calculateMinimumBalance({
-      additionalSigners: 3,
-      trustlines: 1,
-    });
+      const propertyManagerKey =
+        await secureWalletService.getKeypairFromStorage(
+          propertyManagerWallet.id,
+          "user"
+        );
 
-    if (STELLAR_NETWORK === "testnet") {
-      await this.server.friendbot(walletKeypair.publicKey()).call();
-      await this.sleep(2000);
+      // Calculate reserves: Base + signers + expected trustlines
+      const additionalSigners = 2;
+      const expectedTrustlines = 2; // Property token + NGN
 
-      const account = await this.server.loadAccount(walletKeypair.publicKey());
-      const xlmBalance = account.balances.find(
-        (b) => b.asset_type === "native"
-      );
-      const currentBalance = parseFloat(xlmBalance?.balance || "0");
+      const requiredBalance = this.calculateMinimumBalance({
+        additionalSigners,
+        trustlines: expectedTrustlines,
+      });
 
-      if (currentBalance < parseFloat(requiredBalance)) {
-        const additionalFunding = (
-          parseFloat(requiredBalance) -
-          currentBalance +
-          1
-        ).toFixed(7);
+      if (STELLAR_NETWORK === "testnet") {
+        await this.server.friendbot(walletKeypair.publicKey()).call();
+        await this.sleep(2000);
+
+        // Ensure sufficient balance
+        const account = await this.server.loadAccount(
+          walletKeypair.publicKey()
+        );
+        const xlmBalance = account.balances.find(
+          (b) => b.asset_type === "native"
+        );
+        const currentBalance = parseFloat(xlmBalance?.balance || "0");
+
+        if (currentBalance < parseFloat(requiredBalance)) {
+          const additionalFunding = (
+            parseFloat(requiredBalance) -
+            currentBalance +
+            1
+          ).toFixed(7);
+          await this.fundWalletFromTreasury(
+            walletKeypair.publicKey(),
+            additionalFunding
+          );
+        }
+      } else {
         await this.fundWalletFromTreasury(
           walletKeypair.publicKey(),
-          additionalFunding
+          requiredBalance
         );
       }
-    } else {
-      await this.fundWalletFromTreasury(
-        walletKeypair.publicKey(),
-        requiredBalance
-      );
-    }
 
-    const account = await this.server.loadAccount(walletKeypair.publicKey());
+      const account = await this.server.loadAccount(walletKeypair.publicKey());
 
-    const transaction = new TransactionBuilder(account, {
-      fee: BASE_FEE,
-      networkPassphrase: this.network,
-    })
-      .addOperation(
+      // Create transaction builder
+      const transactionBuilder = new TransactionBuilder(account, {
+        fee: BASE_FEE,
+        networkPassphrase: this.network,
+      });
+
+      // Add platform as primary signer
+      transactionBuilder.addOperation(
         Operation.setOptions({
           signer: {
             ed25519PublicKey: (
               await this.getPlatformKeypair("platform")
             ).publicKey(),
-            weight: MULTISIG_CONFIG.PROPERTY_GOVERNANCE.PLATFORM_WEIGHT, // 1
+            weight: MULTISIG_CONFIG.PROPERTY_DISTRIBUTION.PLATFORM_WEIGHT, // 2
           },
         })
-      )
-      .addOperation(
+      );
+
+      // Add property manager
+      transactionBuilder.addOperation(
         Operation.setOptions({
           signer: {
-            ed25519PublicKey: governanceKey.publicKey(),
-            weight: MULTISIG_CONFIG.PROPERTY_GOVERNANCE.GOVERNANCE_WEIGHT, // 1
+            ed25519PublicKey: propertyManagerKey.publicKey(),
+            weight:
+              MULTISIG_CONFIG.PROPERTY_DISTRIBUTION.PROPERTY_MANAGER_WEIGHT, // 1
           },
         })
-      )
-      .addOperation(
-        Operation.setOptions({
-          signer: {
-            ed25519PublicKey: (
-              await this.getPlatformKeypair("recovery")
-            ).publicKey(),
-            weight: MULTISIG_CONFIG.PROPERTY_GOVERNANCE.RECOVERY_WEIGHT, // 1
-          },
-        })
-      )
-      .addOperation(
-        Operation.setOptions({
-          lowThreshold: MULTISIG_CONFIG.PROPERTY_GOVERNANCE.LOW_THRESHOLD, // 2, 2-of-3 for routine decisions
-          medThreshold: MULTISIG_CONFIG.PROPERTY_GOVERNANCE.MEDIUM_THRESHOLD, // 2, 2-of-3 for governance changes
-          highThreshold: MULTISIG_CONFIG.PROPERTY_GOVERNANCE.HIGH_THRESHOLD, // 3, 3-of-3 for critical decisions
-          masterWeight: MULTISIG_CONFIG.PROPERTY_GOVERNANCE.MASTER_WEIGHT, // 0
-        })
-      )
-      .setTimeout(180)
-      .build();
+      );
 
-    transaction.sign(walletKeypair);
-    const result = await this.submitTransactionWithFeeBump(
-      transaction,
-      walletKeypair
-    );
+      // Set thresholds
+      transactionBuilder.addOperation(
+        Operation.setOptions({
+          lowThreshold: MULTISIG_CONFIG.PROPERTY_DISTRIBUTION.LOW_THRESHOLD, // 1 - either platform or property manager
+          medThreshold: MULTISIG_CONFIG.PROPERTY_DISTRIBUTION.MEDIUM_THRESHOLD, // 2 - both required for account changes
+          highThreshold: MULTISIG_CONFIG.PROPERTY_DISTRIBUTION.HIGH_THRESHOLD, // 2 - both required for critical ops
+          masterWeight: MULTISIG_CONFIG.PROPERTY_DISTRIBUTION.MASTER_WEIGHT, // 0
+        })
+      );
 
-    const multiSigWallet = await MultiSigWallet.create({
-      propertyId: params.propertyId,
-      stellarPublicKey: walletKeypair.publicKey(),
-      walletType: "property_governance",
-      lowThreshold: MULTISIG_CONFIG.PROPERTY_GOVERNANCE.LOW_THRESHOLD,
-      mediumThreshold: MULTISIG_CONFIG.PROPERTY_GOVERNANCE.MEDIUM_THRESHOLD,
-      highThreshold: MULTISIG_CONFIG.PROPERTY_GOVERNANCE.HIGH_THRESHOLD,
-      masterWeight: MULTISIG_CONFIG.PROPERTY_GOVERNANCE.MASTER_WEIGHT,
-      status: "active",
-      createdTxHash: result.hash,
-      metadata: {
-        propertyTitle: params.propertyTitle,
-        createdBy: params.createdBy,
+      const transaction = transactionBuilder.setTimeout(180).build();
+      transaction.sign(walletKeypair);
+
+      // Submit transaction with fee bump sponsorship
+      const result = await this.submitTransactionWithFeeBump(
+        transaction,
+        walletKeypair
+      );
+
+      // Create wallet record
+      multiSigWallet = await MultiSigWallet.create({
+        propertyId: params.propertyId,
+        stellarPublicKey: walletKeypair.publicKey(),
+        walletType: "property_distribution",
+        lowThreshold: MULTISIG_CONFIG.PROPERTY_DISTRIBUTION.LOW_THRESHOLD,
+        mediumThreshold: MULTISIG_CONFIG.PROPERTY_DISTRIBUTION.MEDIUM_THRESHOLD,
+        highThreshold: MULTISIG_CONFIG.PROPERTY_DISTRIBUTION.HIGH_THRESHOLD,
+        masterWeight: MULTISIG_CONFIG.PROPERTY_DISTRIBUTION.MASTER_WEIGHT,
+        status: "active",
+        createdTxHash: result.hash,
+        metadata: {
+          propertyTitle: params.propertyTitle,
+          createdBy: params.createdBy,
+          initialBalance: requiredBalance,
+          purpose: "Holds property tokens for distribution to investors",
+          createdAt: new Date().toISOString(),
+        },
+      });
+
+      // Store platform primary key in KMS
+      const platformSecretId = await secureWalletService.storeWalletSecret(
+        multiSigWallet.id,
+        "platform_primary",
+        (await this.getPlatformKeypair("platform")).secret(),
+        {
+          publicKey: (await this.getPlatformKeypair("platform")).publicKey(),
+          role: "platform_distribution",
+          walletType: "property_distribution",
+          propertyId: params.propertyId,
+        }
+      );
+      createdSecrets.push(platformSecretId);
+
+      // Store property manager key in KMS
+      const propertyManagerSecretId =
+        await secureWalletService.storeWalletSecret(
+          multiSigWallet.id,
+          "property_manager",
+          propertyManagerKey.secret(),
+          {
+            publicKey: propertyManagerKey.publicKey(),
+            role: "property_manager",
+            walletType: "property_distribution",
+            propertyId: params.propertyId,
+            propertyTitle: params.propertyTitle,
+          }
+        );
+      createdSecrets.push(propertyManagerSecretId);
+
+      // Store signers
+      const signerPromises = [
+        MultiSigSigner.create({
+          multiSigWalletId: multiSigWallet.id,
+          publicKey: (await this.getPlatformKeypair("platform")).publicKey(),
+          weight: MULTISIG_CONFIG.PROPERTY_DISTRIBUTION.PLATFORM_WEIGHT, // 2
+          role: "property_distribution",
+          status: "active",
+          encryptedSecretId: platformSecretId,
+        }),
+        MultiSigSigner.create({
+          multiSigWalletId: multiSigWallet.id,
+          publicKey: propertyManagerKey.publicKey(),
+          weight: MULTISIG_CONFIG.PROPERTY_DISTRIBUTION.PROPERTY_MANAGER_WEIGHT, // 1
+          role: "property_manager",
+          status: "active",
+          encryptedSecretId: propertyManagerSecretId,
+        }),
+      ];
+
+      await Promise.all(signerPromises);
+
+      logger.info(
+        `Property distribution wallet created: ${walletKeypair.publicKey()} with ${requiredBalance} XLM`
+      );
+
+      return {
+        publicKey: walletKeypair.publicKey(),
+        walletId: multiSigWallet.id,
         initialBalance: requiredBalance,
-        purpose: "Property governance and major decision making",
-      },
-    });
+        signers: [
+          {
+            publicKey: (await this.getPlatformKeypair("platform")).publicKey(),
+            role: "platform_distribution",
+          },
+          {
+            publicKey: propertyManagerKey.publicKey(),
+            role: "property_manager",
+          },
+        ],
+        thresholds: {
+          low: MULTISIG_CONFIG.PROPERTY_DISTRIBUTION.LOW_THRESHOLD,
+          medium: MULTISIG_CONFIG.PROPERTY_DISTRIBUTION.MEDIUM_THRESHOLD,
+          high: MULTISIG_CONFIG.PROPERTY_DISTRIBUTION.HIGH_THRESHOLD,
+        },
+      };
+    } catch (error) {
+      logger.error("Error creating property distribution wallet:", error);
 
-    await Promise.all([
-      MultiSigSigner.create({
-        multiSigWalletId: multiSigWallet.id,
-        publicKey: (await this.getPlatformKeypair("platform")).publicKey(),
-        weight: MULTISIG_CONFIG.PROPERTY_GOVERNANCE.PLATFORM_WEIGHT, // 1
-        role: "platform_governance",
-        status: "active",
-      }),
-      MultiSigSigner.create({
-        multiSigWalletId: multiSigWallet.id,
-        publicKey: governanceKey.publicKey(),
-        weight: MULTISIG_CONFIG.PROPERTY_GOVERNANCE.GOVERNANCE_WEIGHT, // 1
-        role: "governance_key",
-        status: "active",
-        encryptedPrivateKey: encrypt(
-          governanceKey.secret(),
-          `prop_${params.propertyId}_gov`
-        ),
-      }),
-      MultiSigSigner.create({
-        multiSigWalletId: multiSigWallet.id,
-        publicKey: (await this.getPlatformKeypair("recovery")).publicKey(),
-        weight: MULTISIG_CONFIG.PROPERTY_GOVERNANCE.RECOVERY_WEIGHT, // 1
-        role: "platform_recovery",
-        status: "active",
-      }),
-    ]);
+      // Clean up created records if wallet creation failed
+      if (multiSigWallet?.id) {
+        try {
+          // Delete signers
+          await MultiSigSigner.destroy({
+            where: { multiSigWalletId: multiSigWallet.id },
+          });
 
-    return {
-      publicKey: walletKeypair.publicKey(),
-      walletId: multiSigWallet.id,
-      initialBalance: requiredBalance,
-      signers: [
+          // Delete encrypted secrets
+          if (createdSecrets.length > 0) {
+            await EncryptedSecret.destroy({
+              where: { id: { [Op.in]: createdSecrets } },
+            });
+          }
+
+          // Delete wallet record
+          await multiSigWallet.destroy();
+
+          logger.info(
+            `Cleaned up failed property distribution wallet creation: ${multiSigWallet.id}`
+          );
+        } catch (cleanupError) {
+          logger.error(
+            "Error during property distribution wallet cleanup:",
+            cleanupError
+          );
+        }
+      }
+
+      throw new Error(
+        `Failed to create property distribution wallet: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+    }
+  }
+  /**
+   * Create property governance wallet with proper reserves
+   */
+  private async createPropertyGovernanceWallet(params: PropertyWalletParams) {
+    let multiSigWallet: any = null;
+    const createdSecrets: string[] = [];
+
+    try {
+      const walletKeypair = Keypair.random();
+      const governanceKey = Keypair.random();
+      const governanceKey2 = Keypair.random(); // Second governance key instead of recovery
+
+      // Calculate reserves: Base + 3 signers + potential trustlines
+      const requiredBalance = this.calculateMinimumBalance({
+        additionalSigners: 3,
+        trustlines: 1,
+      });
+
+      if (STELLAR_NETWORK === "testnet") {
+        await this.server.friendbot(walletKeypair.publicKey()).call();
+        await this.sleep(2000);
+
+        const account = await this.server.loadAccount(
+          walletKeypair.publicKey()
+        );
+        const xlmBalance = account.balances.find(
+          (b) => b.asset_type === "native"
+        );
+        const currentBalance = parseFloat(xlmBalance?.balance || "0");
+
+        if (currentBalance < parseFloat(requiredBalance)) {
+          const additionalFunding = (
+            parseFloat(requiredBalance) -
+            currentBalance +
+            1
+          ).toFixed(7);
+          await this.fundWalletFromTreasury(
+            walletKeypair.publicKey(),
+            additionalFunding
+          );
+        }
+      } else {
+        await this.fundWalletFromTreasury(
+          walletKeypair.publicKey(),
+          requiredBalance
+        );
+      }
+
+      const account = await this.server.loadAccount(walletKeypair.publicKey());
+
+      const transaction = new TransactionBuilder(account, {
+        fee: BASE_FEE,
+        networkPassphrase: this.network,
+      })
+        .addOperation(
+          Operation.setOptions({
+            signer: {
+              ed25519PublicKey: (
+                await this.getPlatformKeypair("platform")
+              ).publicKey(),
+              weight: MULTISIG_CONFIG.PROPERTY_GOVERNANCE.PLATFORM_WEIGHT, // 1
+            },
+          })
+        )
+        .addOperation(
+          Operation.setOptions({
+            signer: {
+              ed25519PublicKey: governanceKey.publicKey(),
+              weight: MULTISIG_CONFIG.PROPERTY_GOVERNANCE.GOVERNANCE_WEIGHT, // 1
+            },
+          })
+        )
+        .addOperation(
+          Operation.setOptions({
+            signer: {
+              ed25519PublicKey: governanceKey2.publicKey(),
+              weight: MULTISIG_CONFIG.PROPERTY_GOVERNANCE.RECOVERY_WEIGHT, // 1 (reusing config weight)
+            },
+          })
+        )
+        .addOperation(
+          Operation.setOptions({
+            lowThreshold: MULTISIG_CONFIG.PROPERTY_GOVERNANCE.LOW_THRESHOLD, // 2, 2-of-3 for routine decisions
+            medThreshold: MULTISIG_CONFIG.PROPERTY_GOVERNANCE.MEDIUM_THRESHOLD, // 2, 2-of-3 for governance changes
+            highThreshold: MULTISIG_CONFIG.PROPERTY_GOVERNANCE.HIGH_THRESHOLD, // 3, 3-of-3 for critical decisions
+            masterWeight: MULTISIG_CONFIG.PROPERTY_GOVERNANCE.MASTER_WEIGHT, // 0
+          })
+        )
+        .setTimeout(180)
+        .build();
+
+      transaction.sign(walletKeypair);
+      const result = await this.submitTransactionWithFeeBump(
+        transaction,
+        walletKeypair
+      );
+
+      // Create wallet record
+      multiSigWallet = await MultiSigWallet.create({
+        propertyId: params.propertyId,
+        stellarPublicKey: walletKeypair.publicKey(),
+        walletType: "property_governance",
+        lowThreshold: MULTISIG_CONFIG.PROPERTY_GOVERNANCE.LOW_THRESHOLD,
+        mediumThreshold: MULTISIG_CONFIG.PROPERTY_GOVERNANCE.MEDIUM_THRESHOLD,
+        highThreshold: MULTISIG_CONFIG.PROPERTY_GOVERNANCE.HIGH_THRESHOLD,
+        masterWeight: MULTISIG_CONFIG.PROPERTY_GOVERNANCE.MASTER_WEIGHT,
+        status: "active",
+        createdTxHash: result.hash,
+        metadata: {
+          propertyTitle: params.propertyTitle,
+          createdBy: params.createdBy,
+          initialBalance: requiredBalance,
+          purpose: "Property governance and major decision making",
+          createdAt: new Date().toISOString(),
+        },
+      });
+
+      // Store platform primary key in KMS
+      const platformSecretId = await secureWalletService.storeWalletSecret(
+        multiSigWallet.id,
+        "platform_primary",
+        (await this.getPlatformKeypair("platform")).secret(),
         {
           publicKey: (await this.getPlatformKeypair("platform")).publicKey(),
           role: "platform_governance",
-        },
-        { publicKey: governanceKey.publicKey(), role: "governance_key" },
+          walletType: "property_governance",
+          propertyId: params.propertyId,
+        }
+      );
+      createdSecrets.push(platformSecretId);
+
+      // Store governance key in KMS
+      const governanceSecretId = await secureWalletService.storeWalletSecret(
+        multiSigWallet.id,
+        "governance_primary",
+        governanceKey.secret(),
         {
-          publicKey: (await this.getPlatformKeypair("recovery")).publicKey(),
-          role: "platform_recovery",
+          publicKey: governanceKey.publicKey(),
+          role: "governance_key",
+          walletType: "property_governance",
+          propertyId: params.propertyId,
+          propertyTitle: params.propertyTitle,
+        }
+      );
+      createdSecrets.push(governanceSecretId);
+
+      // Store second governance key in KMS
+      const governance2SecretId = await secureWalletService.storeWalletSecret(
+        multiSigWallet.id,
+        "governance_secondary",
+        governanceKey2.secret(),
+        {
+          publicKey: governanceKey2.publicKey(),
+          role: "governance_key_2",
+          walletType: "property_governance",
+          propertyId: params.propertyId,
+          propertyTitle: params.propertyTitle,
+        }
+      );
+      createdSecrets.push(governance2SecretId);
+
+      // Create signer records
+      await Promise.all([
+        MultiSigSigner.create({
+          multiSigWalletId: multiSigWallet.id,
+          publicKey: (await this.getPlatformKeypair("platform")).publicKey(),
+          weight: MULTISIG_CONFIG.PROPERTY_GOVERNANCE.PLATFORM_WEIGHT, // 1
+          role: "property_governance",
+          status: "active",
+          encryptedSecretId: platformSecretId,
+        }),
+        MultiSigSigner.create({
+          multiSigWalletId: multiSigWallet.id,
+          publicKey: governanceKey.publicKey(),
+          weight: MULTISIG_CONFIG.PROPERTY_GOVERNANCE.GOVERNANCE_WEIGHT, // 1
+          role: "property_governance",
+          status: "active",
+          encryptedSecretId: governanceSecretId,
+        }),
+        MultiSigSigner.create({
+          multiSigWalletId: multiSigWallet.id,
+          publicKey: governanceKey2.publicKey(),
+          weight: MULTISIG_CONFIG.PROPERTY_GOVERNANCE.RECOVERY_WEIGHT, // 1
+          role: "property_governance",
+          status: "active",
+          encryptedSecretId: governance2SecretId,
+        }),
+      ]);
+
+      logger.info(
+        `Property governance wallet created: ${walletKeypair.publicKey()} with ${requiredBalance} XLM`
+      );
+
+      return {
+        publicKey: walletKeypair.publicKey(),
+        walletId: multiSigWallet.id,
+        initialBalance: requiredBalance,
+        signers: [
+          {
+            publicKey: (await this.getPlatformKeypair("platform")).publicKey(),
+            role: "platform_governance",
+          },
+          { publicKey: governanceKey.publicKey(), role: "governance_key" },
+          { publicKey: governanceKey2.publicKey(), role: "governance_key_2" },
+        ],
+        thresholds: {
+          low: MULTISIG_CONFIG.PROPERTY_GOVERNANCE.LOW_THRESHOLD,
+          medium: MULTISIG_CONFIG.PROPERTY_GOVERNANCE.MEDIUM_THRESHOLD,
+          high: MULTISIG_CONFIG.PROPERTY_GOVERNANCE.HIGH_THRESHOLD,
         },
-      ],
-      thresholds: {
-        low: MULTISIG_CONFIG.PROPERTY_GOVERNANCE.LOW_THRESHOLD,
-        medium: MULTISIG_CONFIG.PROPERTY_GOVERNANCE.MEDIUM_THRESHOLD,
-        high: MULTISIG_CONFIG.PROPERTY_GOVERNANCE.HIGH_THRESHOLD,
-      },
-    };
+      };
+    } catch (error) {
+      logger.error("Error creating property governance wallet:", error);
+
+      // Clean up created records if wallet creation failed
+      if (multiSigWallet?.id) {
+        try {
+          // Delete signers
+          await MultiSigSigner.destroy({
+            where: { multiSigWalletId: multiSigWallet.id },
+          });
+
+          // Delete encrypted secrets
+          if (createdSecrets.length > 0) {
+            await EncryptedSecret.destroy({
+              where: { id: { [Op.in]: createdSecrets } },
+            });
+          }
+
+          // Delete wallet record
+          await multiSigWallet.destroy();
+
+          logger.info(
+            `Cleaned up failed property governance wallet creation: ${multiSigWallet.id}`
+          );
+        } catch (cleanupError) {
+          logger.error(
+            "Error during property governance wallet cleanup:",
+            cleanupError
+          );
+        }
+      }
+
+      throw new Error(
+        `Failed to create property governance wallet: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+    }
   }
 
   // ===========================================

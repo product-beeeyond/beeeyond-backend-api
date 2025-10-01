@@ -18,7 +18,7 @@ interface PropertyAttributes {
   documents?: object;
   locationDetails?: object;
   rentalIncomeMonthly?: number;
-  propertyManager?: string;
+  propertyManagerPublicKey?: string;
   status: string;
   stellarAssetCode?: string;
   stellarAssetIssuer?: string;
@@ -46,7 +46,7 @@ class Property extends Model<PropertyAttributes, PropertyCreationAttributes> imp
   public documents?: object;
   public locationDetails?: object;
   public rentalIncomeMonthly?: number;
-  public propertyManager?: string;
+  public propertyManagerPublicKey?: string;
   public status!: string;
   public stellarAssetCode?: string;
   public stellarAssetIssuer?: string;
@@ -135,7 +135,7 @@ Property.init(
       type: DataTypes.DECIMAL(10, 2),
       allowNull: true,
     },
-    propertyManager: {
+    propertyManagerPublicKey: {
       type: DataTypes.STRING,
       allowNull: true,
     },

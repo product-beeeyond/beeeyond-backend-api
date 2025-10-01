@@ -78,7 +78,7 @@
 // //     "documents",
 // //     "locationDetails",
 // //     "rentalIncomeMonthly",
-// //     "propertyManager",
+// //     "propertyManagerPublicKey",
 // //     "status",
 // //     "featured",
 // //   ];

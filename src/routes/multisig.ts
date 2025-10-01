@@ -524,6 +524,8 @@ import {
   // recoverUserWallet,
   getWalletInfo,
   listUserWallets,
+  createPlatformTreasury,
+  finalizePlatformTreasury,
 } from "../controllers/multisigController";
 
 const router = Router();
@@ -694,6 +696,19 @@ router.post(
   createPlatformWallets
 );
 
+router.post(
+  "/initiate-platform-treasury",
+  authenticate,
+  requireSuperAdmin,
+  createPlatformTreasury
+);
+
+router.post(
+  "/finalize-platform-treasury",
+  authenticate,
+  requireSuperAdmin,
+  finalizePlatformTreasury
+);
 // ===========================================
 // PROPERTY WALLET ROUTES
 // ===========================================
