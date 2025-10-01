@@ -44,10 +44,7 @@ EncryptedSecret.init(
     walletId: {
       type: DataTypes.UUID,
       allowNull: false,
-      references: {
-        model: 'MultiSigWallets',
-        key: 'id',
-      },
+      // Removed references - handled by associations
     },
     secretType: {
       type: DataTypes.STRING,

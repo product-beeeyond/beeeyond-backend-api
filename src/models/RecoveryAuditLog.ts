@@ -40,10 +40,7 @@ RecoveryAuditLog.init(
     recoveryRequestId: {
       type: DataTypes.UUID,
       allowNull: false,
-      references: {
-        model: 'recovery_requests',
-        key: 'id',
-      },
+      // Removed references - handled by associations
     },
     actionType: {
       type: DataTypes.ENUM('created', 'approved', 'rejected', 'executed', 'failed', 'expired', 'retry_attempted'),
@@ -52,10 +49,7 @@ RecoveryAuditLog.init(
     performedBy: {
       type: DataTypes.UUID,
       allowNull: false,
-      references: {
-        model: 'users',
-        key: 'id',
-      },
+      // Removed references - handled by associations
     },
     performedAt: {
       type: DataTypes.DATE,
