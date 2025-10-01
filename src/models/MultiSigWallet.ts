@@ -112,10 +112,6 @@ MultiSigWallet.init(
     userId: {
       type: DataTypes.UUID,
       allowNull: true,
-      references: {
-        model: "users",
-        key: "id",
-      },
       validate: {
         userWalletMustHaveUserId(value: string | null) {
           if (this.walletType === "user_recovery" && !value) {
@@ -127,10 +123,6 @@ MultiSigWallet.init(
     propertyId: {
       type: DataTypes.UUID,
       allowNull: true,
-      references: {
-        model: "properties",
-        key: "id",
-      },
       validate: {
         propertyWalletMustHavePropertyId(value: string | null) {
           if (

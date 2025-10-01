@@ -38,18 +38,10 @@ PropertyHolding.init(
     userId: {
       type: DataTypes.UUID,
       allowNull: false,
-      references: {
-        model: 'users',
-        key: 'id',
-      },
     },
     propertyId: {
       type: DataTypes.UUID,
       allowNull: false,
-      references: {
-        model: 'properties',
-        key: 'id',
-      },
     },
     tokensOwned: {
       type: DataTypes.INTEGER,

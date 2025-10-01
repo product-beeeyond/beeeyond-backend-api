@@ -7,6 +7,7 @@ import PropertyHolding from './PropertyHolding';
 import RecoveryRequest from './RecoveryRequest';
 import RecoveryAuditLog from './RecoveryAuditLog';
 import EncryptedSecret from './EncryptedSecret';
+import PropertyGovernance from './PropertyGovernance';
 
 // User associations
 User.hasMany(MultiSigWallet, { 
@@ -25,10 +26,58 @@ User.hasMany(MultiSigSigner, {
   onUpdate: 'CASCADE'
 });
 
+User.hasMany(PropertyHolding, { 
+  foreignKey: 'userId', 
+  as: 'holdings',
+  constraints: true,
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
+
+User.hasMany(RecoveryRequest, { 
+  foreignKey: 'userId', 
+  as: 'recoveryRequests',
+  constraints: true,
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
+
+User.hasMany(RecoveryRequest, { 
+  foreignKey: 'requestedBy', 
+  as: 'initiatedRecoveries',
+  constraints: true,
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
+
+User.hasMany(PropertyGovernance, { 
+  foreignKey: 'proposerId', 
+  as: 'proposals',
+  constraints: true,
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
+
 // Property associations
 Property.hasMany(MultiSigWallet, { 
   foreignKey: 'propertyId', 
   as: 'multiSigWallets',
+  constraints: true,
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
+
+Property.hasMany(PropertyHolding, { 
+  foreignKey: 'propertyId', 
+  as: 'holdings',
+  constraints: true,
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
+
+Property.hasMany(PropertyGovernance, { 
+  foreignKey: 'propertyId', 
+  as: 'governanceProposals',
   constraints: true,
   onDelete: 'CASCADE',
   onUpdate: 'CASCADE'
@@ -75,6 +124,14 @@ MultiSigWallet.hasMany(EncryptedSecret, {
   onUpdate: 'CASCADE'
 });
 
+MultiSigWallet.hasMany(RecoveryRequest, { 
+  foreignKey: 'walletId', 
+  as: 'recoveryRequests',
+  constraints: true,
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
+
 // MultiSigSigner associations
 MultiSigSigner.belongsTo(MultiSigWallet, { 
   foreignKey: 'multiSigWalletId', 
@@ -101,6 +158,14 @@ MultiSigTransaction.belongsTo(MultiSigWallet, {
   onUpdate: 'CASCADE'
 });
 
+MultiSigTransaction.hasMany(PropertyGovernance, { 
+  foreignKey: 'multiSigTransactionId', 
+  as: 'governanceProposals',
+  constraints: true,
+  onDelete: 'SET NULL',
+  onUpdate: 'CASCADE'
+});
+
 // EncryptedSecret associations
 EncryptedSecret.belongsTo(MultiSigWallet, { 
   foreignKey: 'walletId', 
@@ -111,22 +176,6 @@ EncryptedSecret.belongsTo(MultiSigWallet, {
 });
 
 // PropertyHolding associations
-User.hasMany(PropertyHolding, { 
-  foreignKey: 'userId', 
-  as: 'holdings',
-  constraints: true,
-  onDelete: 'CASCADE',
-  onUpdate: 'CASCADE'
-});
-
-Property.hasMany(PropertyHolding, { 
-  foreignKey: 'propertyId', 
-  as: 'holdings',
-  constraints: true,
-  onDelete: 'CASCADE',
-  onUpdate: 'CASCADE'
-});
-
 PropertyHolding.belongsTo(User, { 
   foreignKey: 'userId', 
   as: 'user',
@@ -143,31 +192,32 @@ PropertyHolding.belongsTo(Property, {
   onUpdate: 'CASCADE'
 });
 
+// PropertyGovernance associations
+PropertyGovernance.belongsTo(Property, { 
+  foreignKey: 'propertyId', 
+  as: 'property',
+  constraints: true,
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
+
+PropertyGovernance.belongsTo(User, { 
+  foreignKey: 'proposerId', 
+  as: 'proposer',
+  constraints: true,
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
+
+PropertyGovernance.belongsTo(MultiSigTransaction, { 
+  foreignKey: 'multiSigTransactionId', 
+  as: 'transaction',
+  constraints: true,
+  onDelete: 'SET NULL',
+  onUpdate: 'CASCADE'
+});
+
 // RecoveryRequest associations
-User.hasMany(RecoveryRequest, { 
-  foreignKey: 'userId', 
-  as: 'recoveryRequests',
-  constraints: true,
-  onDelete: 'CASCADE',
-  onUpdate: 'CASCADE'
-});
-
-User.hasMany(RecoveryRequest, { 
-  foreignKey: 'requestedBy', 
-  as: 'initiatedRecoveries',
-  constraints: true,
-  onDelete: 'CASCADE',
-  onUpdate: 'CASCADE'
-});
-
-MultiSigWallet.hasMany(RecoveryRequest, { 
-  foreignKey: 'walletId', 
-  as: 'recoveryRequests',
-  constraints: true,
-  onDelete: 'CASCADE',
-  onUpdate: 'CASCADE'
-});
-
 RecoveryRequest.belongsTo(User, { 
   foreignKey: 'userId', 
   as: 'user',
@@ -224,6 +274,7 @@ export default {
   MultiSigSigner,
   MultiSigTransaction,
   PropertyHolding,
+  PropertyGovernance,
   RecoveryRequest,
   RecoveryAuditLog,
   EncryptedSecret

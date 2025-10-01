@@ -72,18 +72,10 @@ MultiSigSigner.init(
     multiSigWalletId: {
       type: DataTypes.UUID,
       allowNull: false,
-      references: {
-        model: "multisig_wallets",
-        key: "id",
-      },
     },
     userId: {
       type: DataTypes.UUID,
       allowNull: true,
-      references: {
-        model: "users",
-        key: "id",
-      },
     },
     publicKey: {
       type: DataTypes.STRING,

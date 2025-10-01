@@ -775,15 +775,8 @@ class StellarService {
         const currentBalance = parseFloat(xlmBalance?.balance || "0");
 
         if (currentBalance < parseFloat(requiredBalance)) {
-          const additionalFunding = (
-            parseFloat(requiredBalance) -
-            currentBalance +
-            1
-          ).toFixed(7);
-          await this.fundWalletFromTreasury(
-            walletKeypair.publicKey(),
-            additionalFunding
-          );
+          await this.server.friendbot(walletKeypair.publicKey()).call();
+          await this.sleep(2000);
         }
       } else {
         fundingRequired = true;
