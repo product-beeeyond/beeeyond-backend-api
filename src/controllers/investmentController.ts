@@ -496,7 +496,7 @@
 //       transactionXDR: '', // Will be populated by stellar service
 //       description: `Purchase ${quantity} tokens of ${property.title}`,
 //       category: 'fund_management',
-//       requiredSignatures: 1, // User recovery wallet needs 1 signature
+//       requiredSignatures: 1, // User wallet needs 1 signature
 //       status: 'pending',
 //       proposedBy: userId,
 //       metadata: {

@@ -47,7 +47,7 @@
 
 //     if (!wallet) {
 //       return res.status(404).json({ 
-//         error: 'User recovery wallet not found' 
+//         error: 'User wallet not found' 
 //       });
 //     }
 

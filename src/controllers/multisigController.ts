@@ -36,12 +36,12 @@ export const createUserMultisigWallet = async (
 
     // Check if user already has a multisig wallet
     const existingWallet = await MultiSigWallet.findOne({
-      where: { userId, walletType: "user_recovery" },
+      where: { userId, walletType: "user" },
     });
 
     if (existingWallet) {
       return res.status(400).json({
-        error: "User already has a recovery wallet",
+        error: "User already has a wallet",
         wallet: {
           publicKey: existingWallet.stellarPublicKey,
           walletId: existingWallet.id,
@@ -98,10 +98,9 @@ export const createPlatformWallets = async (
     }
 
     const { walletType, description } = req.body;
-    // , 'distribution', 'fee_collection'
-    if (!walletType || !["treasury", "issuer"].includes(walletType)) {
+    if (!walletType || !["primary", "issuer"].includes(walletType)) {
       return res.status(400).json({
-        error: "Invalid wallet type. Must be: treasury or issuer.",
+        error: "Invalid wallet type. Must be: primary or issuer.",
       });
     }
 
@@ -120,12 +119,12 @@ export const createPlatformWallets = async (
     let walletResult;
 
     switch (walletType) {
-      // case 'treasury':
-      //   walletResult = await stellarService.createPlatformTreasuryWallet({
-      //     description: description || 'Main platform treasury for funding operations',
-      //     createdBy: req.user!.id
-      //   });
-      //   break;
+      case 'primary':
+        walletResult = await stellarService.createPlatformPrimaryWallet({
+          description: description || 'Main platform primary wallet for signing',
+          createdBy: req.user!.id
+        });
+        break;
 
       case "issuer":
         walletResult = await stellarService.createPlatformIssuerWallet({
@@ -134,9 +133,9 @@ export const createPlatformWallets = async (
         });
         break;
 
-      // case 'distribution':
-      //   walletResult = await stellarService.createPlatformDistributionWallet({
-      //     description: description || 'Main distribution wallet for token sales',
+      // case 'platform_recovery':
+      //   walletResult = await stellarService.createPlatformRecoveryWallet({
+      //     description: description || 'Platform re',
       //     createdBy: req.user!.id
       //   });
       //   break;
@@ -526,11 +525,11 @@ export const recoverUserWallet = async (req: AuthRequest, res: Response) => {
 
     // Find user's recovery wallet
     const userWallet = await MultiSigWallet.findOne({
-      where: { userId, walletType: "user_recovery" },
+      where: { userId, walletType: "user" },
     });
 
     if (!userWallet) {
-      return res.status(404).json({ error: "User recovery wallet not found" });
+      return res.status(404).json({ error: "User  wallet not found" });
     }
 
     // Perform recovery operation

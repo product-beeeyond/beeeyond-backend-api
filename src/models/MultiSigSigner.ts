@@ -14,6 +14,8 @@ export interface MultiSigSignerAttributes {
     | "platform_secondary"
     | "platform_tertiary"
     | "platform_issuer"
+    | "platform_backup"
+    | "platform_backup_2"
     | "issuer_backup"
     | "property_distribution"
     | "property_governance"
@@ -48,6 +50,8 @@ class MultiSigSigner
     | "platform_secondary"
     | "platform_tertiary"
     | "platform_issuer"
+    | "platform_backup"
+    | "platform_backup_2"
     | "issuer_backup"
     | "property_distribution"
     | "property_governance"
@@ -101,6 +105,8 @@ MultiSigSigner.init(
         "platform_tertiary",
         "platform_issuer",
         "issuer_backup",
+        "platform_backup",
+        "platform_backup_2",
         "property_distribution",
         "property_governance",
         "property_manager",
