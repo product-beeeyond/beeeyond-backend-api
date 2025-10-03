@@ -131,7 +131,7 @@ class StellarService {
       try {
         const existingKeypair = await secureWalletService.retrieveWalletSecret(
           batchId,
-          "platform-global" // Use global context for batch keys ?? fix
+          "platform_recovery_batch"
         );
 
         if (existingKeypair) {
@@ -162,7 +162,7 @@ class StellarService {
       // Store the new batch key globally
       await secureWalletService.storeWalletSecret(
         batchId,
-        "platform-global",
+        "platform_recovery_batch",
         newBatchKeypair.secret(),
         {
           publicKey: newBatchKeypair.publicKey(),
@@ -177,7 +177,7 @@ class StellarService {
       );
 
       logger.info(
-        `Created new recovery batch ${currentBatch} for wallets ${
+        `Created new recovery keypair batch ${currentBatch} for wallets ${
           currentBatch * 1000
         }-${(currentBatch + 1) * 1000 - 1}`
       );
@@ -424,16 +424,6 @@ class StellarService {
       // Find the wallet and its recovery signer
       const wallet = await MultiSigWallet.findOne({
         where: { stellarPublicKey: walletPublicKey },
-        include: [
-          {
-            model: MultiSigSigner,
-            as: "signers",
-            where: {
-              role: "platform_recovery",
-              status: "active",
-            },
-          },
-        ],
       });
 
       if (!wallet || !wallet.signers?.[0]) {
@@ -2369,18 +2359,30 @@ class StellarService {
     try {
       const { walletPublicKey, newUserPublicKey, recoveryReason, recoveredBy } =
         params;
-
       // Load the wallet account
       const account = await this.server.loadAccount(walletPublicKey);
 
       // Find old user signer to remove
       const wallet = await MultiSigWallet.findOne({
         where: { stellarPublicKey: walletPublicKey },
-        include: [
-          { model: MultiSigSigner, as: "signers", where: { role: "user" } },
-        ],
+        include: [{ model: MultiSigSigner, as: "signers" }],
       });
-
+      if (!wallet || !wallet.signers) {
+        throw new Error("User signers not found");
+      }
+      // const userSigner = wallet.signers.find((s) => s.role === "user");
+      // const platformSigner = wallet.signers.find(
+      //   (s) => s.role === "platform_primary"
+      // );
+      // const recoverySigner = wallet.signers.find(
+      //   (s) => s.role === "platform_recovery"
+      // );
+      // if (!recoverySigner) {
+      //   throw new Error("recoverySigner not found");
+      // }
+      const recoveryKeypair = await this.getRecoveryKeypairForWallet(
+        walletPublicKey
+      );
       if (!wallet || !wallet.signers?.[0]) {
         throw new Error("User signer not found");
       }
@@ -2414,12 +2416,12 @@ class StellarService {
         .build();
 
       // Sign with platform recovery key
-      transaction.sign(await this.getPlatformKeypair("recovery"));
+      transaction.sign(recoveryKeypair);
 
       // Submit transaction with fee bump sponsorship
       const result = await this.submitTransactionWithFeeBump(
         transaction,
-        await this.getPlatformKeypair("recovery")
+        recoveryKeypair
       );
 
       // Update database records
@@ -2902,7 +2904,7 @@ class StellarService {
         });
 
         if (recoverySigner) {
-          signerKeypair = await this.getPlatformKeypair("recovery");
+          signerKeypair = await this.getRecoveryKeypairForWallet(wallet.id);
         } else {
           // Try other platform signers
           const platformSigner = await MultiSigSigner.findOne({
@@ -3042,10 +3044,12 @@ class StellarService {
     oldUserPublicKey: string;
     newUserPublicKey: string;
     recoveryRequestId: string;
-  }): Promise<{ transaction: any; xdr: string }> {
+  }): Promise<{ recoveryKeypair: Keypair; transaction: any; xdr: string }> {
     try {
       const account = await this.server.loadAccount(params.walletPublicKey);
-
+      const recoveryKeypair = await this.getRecoveryKeypairForWallet(
+        params.walletPublicKey
+      );
       const transaction = new TransactionBuilder(account, {
         fee: BASE_FEE,
         networkPassphrase: this.network,
@@ -3072,13 +3076,14 @@ class StellarService {
         .build();
 
       // Sign with platform recovery key
-      transaction.sign(await this.getPlatformKeypair("recovery"));
+      transaction.sign(recoveryKeypair);
 
       logger.info(
         `Recovery transaction created for request: ${params.recoveryRequestId}`
       );
 
       return {
+        recoveryKeypair,
         transaction,
         xdr: transaction.toXDR(),
       };
@@ -3103,12 +3108,13 @@ class StellarService {
     error?: string;
   }> {
     try {
-      const { transaction } = await this.createRecoveryTransaction(params);
+      const { recoveryKeypair, transaction } =
+        await this.createRecoveryTransaction(params);
 
       // Submit transaction with fee bump sponsorship
       const result = await this.submitTransactionWithFeeBump(
         transaction,
-        await this.getPlatformKeypair("recovery")
+        recoveryKeypair
       );
 
       logger.info(`Recovery transaction executed successfully: ${result.hash}`);

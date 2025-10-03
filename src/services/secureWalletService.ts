@@ -62,6 +62,11 @@ class SecureWalletService {
           where: { secretType },
           order: [["createdAt", "DESC"]], // Get latest version
         });
+      } else if (walletId === "recovery") {
+        secretRecord = await EncryptedSecret.findOne({
+          where: { walletId: secretType },
+          order: [["createdAt", "DESC"]], // Get latest version
+        });
       } else {
         secretRecord = await EncryptedSecret.findOne({
           where: { walletId, secretType },
