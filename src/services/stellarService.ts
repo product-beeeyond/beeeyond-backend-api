@@ -12,7 +12,6 @@ import {
   FeeBumpTransaction,
 } from "@stellar/stellar-sdk";
 import logger from "../utils/logger";
-import { decrypt } from "../utils/cypher";
 import MultiSigWallet from "../models/MultiSigWallet";
 import MultiSigSigner, {
   MultiSigSignerAttributes,
@@ -767,7 +766,6 @@ class StellarService {
 
       let fundingRequired = false;
 
-      // Testnet funding logic (unchanged)
       if (STELLAR_NETWORK === "testnet") {
         await this.server.friendbot(walletKeypair.publicKey()).call();
         await this.sleep(2000);
@@ -930,7 +928,7 @@ class StellarService {
         where: {
           stellarPublicKey: publicKey,
           walletType: "platform_treasury",
-          status: ["awaiting_funding", "awaiting_finalization"],
+          status: ["awaiting_funding", "awaiting_finalization", "inactive"],
         },
         include: [
           {
@@ -3008,33 +3006,33 @@ class StellarService {
   /**
    * Get signer keypair from encrypted storage
    */
-  async getSignerKeypair(
-    walletId: string,
-    role: string
-  ): Promise<Keypair | null> {
-    try {
-      const signer = await MultiSigSigner.findOne({
-        where: {
-          multiSigWalletId: walletId,
-          role,
-          status: "active",
-          encryptedPrivateKey: { [Op.not]: "" },
-        },
-      });
+  // async getSignerKeypair(
+  //   walletId: string,
+  //   role: string
+  // ): Promise<Keypair | null> {
+  //   try {
+  //     const signer = await MultiSigSigner.findOne({
+  //       where: {
+  //         multiSigWalletId: walletId,
+  //         role,
+  //         status: "active",
+  //         encryptedPrivateKey: { [Op.not]: "" },
+  //       },
+  //     });
 
-      if (!signer || !signer.encryptedPrivateKey) {
-        return null;
-      }
+  //     if (!signer || !signer.encryptedPrivateKey) {
+  //       return null;
+  //     }
 
-      const decryptionKey = `${role}_${walletId}`;
-      const privateKey = decrypt(signer.encryptedPrivateKey, decryptionKey);
+  //     const decryptionKey = `${role}_${walletId}`;
+  //     const privateKey = decrypt(signer.encryptedPrivateKey, decryptionKey);
 
-      return Keypair.fromSecret(privateKey);
-    } catch (error) {
-      logger.error(`Error getting signer keypair for role ${role}:`, error);
-      return null;
-    }
-  }
+  //     return Keypair.fromSecret(privateKey);
+  //   } catch (error) {
+  //     logger.error(`Error getting signer keypair for role ${role}:`, error);
+  //     return null;
+  //   }
+  // }
 
   /**
    * Create time-locked recovery transaction

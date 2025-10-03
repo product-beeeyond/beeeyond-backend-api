@@ -22,7 +22,6 @@ export interface MultiSigSignerAttributes {
     | "property_manager"
     | "governance_key";
   status: "active" | "inactive" | "recovered" | "pending";
-  encryptedPrivateKey?: string; // Only for platform-controlled keys
   encryptedSecretId?: string;
   metadata?: object;
   createdAt?: Date;
@@ -58,7 +57,6 @@ class MultiSigSigner
     | "property_manager"
     | "governance_key";
   public status!: "active" | "inactive" | "recovered" | "pending";
-  public encryptedPrivateKey?: string;
   public encryptedSecretId?: string;
   public metadata?: object;
 
@@ -115,45 +113,45 @@ MultiSigSigner.init(
       allowNull: false,
     },
     status: {
-      type: DataTypes.ENUM("active", "inactive", "recovered"),
+      type: DataTypes.ENUM("active", "inactive", "recovered", "pending"),
       defaultValue: "active",
     },
     encryptedSecretId: {
       type: DataTypes.STRING,
       allowNull: true,
     },
-    encryptedPrivateKey: {
-      type: DataTypes.TEXT,
-      allowNull: true,
-      validate: {
-        platformKeysOnly(value: string | null) {
-          const platformRoles = [
-            "platform_recovery",
-            "platform_primary",
-            "platform_secondary",
-            "platform_tertiary",
-            "platform_issuer",
-            "issuer_backup",
-            "property_distribution",
-            "property_governance",
-            "property_manager",
-            "governance_key",
-          ];
+    // encryptedPrivateKey: {
+    //   type: DataTypes.TEXT,
+    //   allowNull: true,
+    //   validate: {
+    //     platformKeysOnly(value: string | null) {
+    //       const platformRoles = [
+    //         "platform_recovery",
+    //         "platform_primary",
+    //         "platform_secondary",
+    //         "platform_tertiary",
+    //         "platform_issuer",
+    //         "issuer_backup",
+    //         "property_distribution",
+    //         "property_governance",
+    //         "property_manager",
+    //         "governance_key",
+    //       ];
 
-          if (platformRoles.includes(String(this.role)) && !value) {
-            throw new Error(
-              "Platform-controlled signers must have encrypted private key"
-            );
-          }
+    //       if (platformRoles.includes(String(this.role)) && !value) {
+    //         throw new Error(
+    //           "Platform-controlled signers must have encrypted private key"
+    //         );
+    //       }
 
-          if (this.role === "user" && value) {
-            throw new Error(
-              "User signers should not have encrypted private key stored"
-            );
-          }
-        },
-      },
-    },
+    //       if (this.role === "user" && value) {
+    //         throw new Error(
+    //           "User signers should not have encrypted private key stored"
+    //         );
+    //       }
+    //     },
+    //   },
+    // },
     metadata: {
       type: DataTypes.JSONB,
       allowNull: true,

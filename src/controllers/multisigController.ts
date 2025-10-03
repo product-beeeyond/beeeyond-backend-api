@@ -273,7 +273,7 @@ export const finalizePlatformTreasury = async (
       where: {
         stellarPublicKey: publicKey,
         walletType: "platform_treasury",
-        status: ["awaiting_funding", "awaiting_finalization"],
+        status: ["awaiting_funding", "awaiting_finalization", "inactive"],
       },
     });
 
