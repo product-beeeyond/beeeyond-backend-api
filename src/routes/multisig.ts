@@ -520,7 +520,6 @@ import {
   // Wallet Management
   createUserMultisigWallet,
   createPlatformWallets,
-  createPropertyWallets,
   // recoverUserWallet,
   getWalletInfo,
   listUserWallets,
@@ -533,14 +532,6 @@ const router = Router();
 // ===========================================
 // VALIDATION MIDDLEWARE
 // ===========================================
-
-const validatePropertyId = (req: any, res: any, next: any) => {
-  const { propertyId } = req.params;
-  if (!propertyId || propertyId.length < 1) {
-    return res.status(400).json({ error: "Valid property ID is required" });
-  }
-  next();
-};
 
 const validatePublicKey = (req: any, res: any, next: any) => {
   const { publicKey } = req.params;
@@ -708,21 +699,6 @@ router.post(
   authenticate,
   requireSuperAdmin,
   finalizePlatformTreasury
-);
-// ===========================================
-// PROPERTY WALLET ROUTES
-// ===========================================
-
-/**
- * Create property-specific wallets (Admin only)
- * POST /api/multisig/property/:propertyId/wallets
- */
-router.post(
-  "/property/:propertyId/wallets",
-  authenticate,
-  requireAdmin,
-  validatePropertyId,
-  createPropertyWallets
 );
 
 // ===========================================

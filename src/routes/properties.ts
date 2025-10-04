@@ -7,7 +7,10 @@ import {
   requireKYC,
   requireSuperAdmin,
 } from "../middleware/auth";
-import { validatePropertyCreation, validatePropertyUpdate } from "../middleware/validation";
+import {
+  validatePropertyCreation,
+  validatePropertyUpdate,
+} from "../middleware/validation";
 import {
   // New comprehensive methods
   CreateProperty,
@@ -16,7 +19,7 @@ import {
   GetSingleProperty,
   DeactivateProperty,
   GetPropertyAnalytics,
-  CreatePropertyWallets,
+  createPropertyWallets,
   // // Existing methods
   // GetPropertyTransactions,
   // GetPropertyWalletStatus,
@@ -27,7 +30,7 @@ import MultiSigTransaction from "../models/MultiSigTransaction";
 import PropertyHolding from "../models/PropertyHolding";
 import logger from "../utils/logger";
 import { Op } from "sequelize";
-import sequelize from "sequelize/types/sequelize";
+import { fn, col } from "sequelize";
 import { stellarService } from "../services/stellarService";
 
 const router = Router();
@@ -367,7 +370,7 @@ router.get(
  * Requires: Admin access
  */
 router.post(
-  "/",
+  "/create-property",
   authenticate,
   requireAdmin,
   validatePropertyCreation,
@@ -408,7 +411,7 @@ router.post(
   authenticate,
   requireAdmin,
   validatePropertyId,
-  CreatePropertyWallets
+  createPropertyWallets
 );
 
 /**
@@ -557,9 +560,9 @@ router.get(
       const stats = await Property.findAll({
         attributes: [
           "status",
-          [sequelize.fn("COUNT", sequelize.col("id")), "count"],
-          [sequelize.fn("SUM", sequelize.col("totalValue")), "totalValue"],
-          [sequelize.fn("SUM", sequelize.col("totalTokens")), "totalTokens"],
+          [fn("COUNT", col("id")), "count"],
+          [fn("SUM", col("totalValue")), "totalValue"],
+          [fn("SUM", col("totalTokens")), "totalTokens"],
         ],
         group: ["status"],
       });
@@ -696,18 +699,9 @@ router.get(
       const investmentStats = await PropertyHolding.findAll({
         where: { propertyId },
         attributes: [
-          [
-            sequelize.fn("SUM", sequelize.col("tokensOwned")),
-            "totalTokensSold",
-          ],
-          [
-            sequelize.fn("SUM", sequelize.col("totalInvested")),
-            "totalInvestmentAmount",
-          ],
-          [
-            sequelize.fn("AVG", sequelize.col("averagePrice")),
-            "averageTokenPrice",
-          ],
+          [fn("SUM", col("tokensOwned")), "totalTokensSold"],
+          [fn("SUM", col("totalInvested")), "totalInvestmentAmount"],
+          [fn("AVG", col("averagePrice")), "averageTokenPrice"],
         ],
       });
 
