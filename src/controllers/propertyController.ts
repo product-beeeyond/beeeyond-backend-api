@@ -10,7 +10,7 @@ import logger from "../utils/logger";
 import { sequelize } from "../config/database";
 import { Op, Transaction } from "sequelize";
 // import { validate, propertySchema } from "../middleware/validation";
-import MultiSigTransaction from '../models/MultiSigTransaction';
+import MultiSigTransaction from "../models/MultiSigTransaction";
 
 // ===========================================
 // CREATE PROPERTY WITH FULL TOKENIZATION FLOW
@@ -27,7 +27,7 @@ export const CreateProperty = async (req: AuthRequest, res: Response) => {
       propertyType,
       totalTokens,
       tokenPrice,
-      totalValue,
+      propertyManager,
       expectedAnnualReturn,
       minimumInvestment,
       images,
@@ -49,7 +49,7 @@ export const CreateProperty = async (req: AuthRequest, res: Response) => {
     }
 
     // Calculate total value if not provided
-    const calculatedTotalValue = totalValue || totalTokens * tokenPrice;
+    const calculatedTotalValue = totalTokens * tokenPrice;
 
     // Step 1: Create the property record
     const property = await Property.create(
@@ -69,6 +69,7 @@ export const CreateProperty = async (req: AuthRequest, res: Response) => {
         documents,
         locationDetails,
         rentalIncomeMonthly,
+        propertyManager,
         propertyManagerPublicKey,
         status: "coming_soon", // Start as coming_soon until fully set up
         featured: featured || false,
@@ -90,26 +91,23 @@ export const CreateProperty = async (req: AuthRequest, res: Response) => {
       `Property wallets created for ${property.title}: Distribution ${walletResult.distributionWallet.publicKey}`
     );
 
-    // // Step 3: Fund distribution wallet with minimum XLM for operations
-    // await stellarService.fundWalletFromTreasury(
-    //   walletResult.distributionWallet.publicKey,
-    //   "2" // 2 XLM for operations
-    // );
+    const tokenizationResult = await stellarService.createAndIssuePropertyToken(
+      {
+        propertyId: property.id,
+        totalSupply: totalTokens,
+        distributionWalletPublicKey: walletResult.distributionWallet.publicKey,
+      }
+    );
 
-    // Step 4: Create and issue property tokens
-    const assetCode = `PROP${property.id.substring(0, 8).toUpperCase()}`;
-
-    await stellarService.createAndIssuePropertyToken({
-      propertyId: property.id,
-      totalSupply: totalTokens,
-      distributionWalletPublicKey: walletResult.distributionWallet.publicKey,
-    });
-
+    if (!tokenizationResult.assetCode) {
+      logger.error(`Error occured during tokenization`);
+      throw new Error("Error occured during tokenization");
+    }
     // Step 5: Update property with Stellar asset information
     await property.update(
       {
-        stellarAssetCode: assetCode,
-        stellarAssetIssuer: walletResult.distributionWallet.publicKey,
+        stellarAssetCode: tokenizationResult.assetCode,
+        stellarAssetIssuer: tokenizationResult.assetIssuer,
         status: "active", // Now fully set up and ready for investment
       },
       { transaction: dbTransaction }
@@ -119,7 +117,7 @@ export const CreateProperty = async (req: AuthRequest, res: Response) => {
     await dbTransaction.commit();
 
     logger.info(
-      `Property ${property.title} fully tokenized with ${totalTokens} ${assetCode} tokens`
+      `Property ${property.title} fully tokenized with ${totalTokens} ${tokenizationResult.assetCode} tokens`
     );
 
     // Return comprehensive response
@@ -139,13 +137,13 @@ export const CreateProperty = async (req: AuthRequest, res: Response) => {
         minimumInvestment: property.minimumInvestment,
         status: property.status,
         stellarAssetCode: property.stellarAssetCode,
-        stellarAssetIssuer: property.stellarAssetIssuer,
+        stellarAssetIssuer: tokenizationResult.assetIssuer,
         featured: property.featured,
         createdAt: property.createdAt,
       },
       tokenization: {
-        assetCode: assetCode,
-        assetIssuer: walletResult.distributionWallet.publicKey,
+        assetCode: tokenizationResult.assetCode,
+        assetIssuer: tokenizationResult.assetIssuer,
         totalSupply: totalTokens,
         distributionWallet: walletResult.distributionWallet.publicKey,
         tokensIssued: true,
@@ -510,21 +508,26 @@ export const GetPropertyAnalytics = async (req: AuthRequest, res: Response) => {
 // CREATE PROPERTY WALLETS (STANDALONE - FOR EXISTING PROPERTIES)
 // ===========================================
 
-export const CreatePropertyWallets = async (
+export const createPropertyWallets = async (
   req: AuthRequest,
   res: Response
 ) => {
   try {
-    const { id } = req.params;
+    const { propertyId } = req.params;
 
-    const property = await Property.findByPk(id);
+    if (!propertyId) {
+      return res.status(400).json({ error: "Property ID is required" });
+    }
+
+    // Verify property exists
+    const property = await Property.findByPk(propertyId);
     if (!property) {
       return res.status(404).json({ error: "Property not found" });
     }
 
     // Check if property wallets already exist
     const existingWallet = await MultiSigWallet.findOne({
-      where: { propertyId: property.id, walletType: "property_distribution" },
+      where: { propertyId, walletType: "property_distribution" },
     });
 
     if (existingWallet) {
@@ -534,7 +537,7 @@ export const CreatePropertyWallets = async (
       });
     }
 
-    // Create property wallets
+    // Create property-specific wallets
     const walletResult = await stellarService.createPropertyWallets({
       propertyId: property.id,
       propertyTitle: property.title,
@@ -542,19 +545,21 @@ export const CreatePropertyWallets = async (
       createdBy: req.user!.id,
     });
 
-    // Fund distribution wallet
-    await stellarService.fundWalletFromTreasury(
-      walletResult.distributionWallet.publicKey,
-      "2"
-    );
+    // // Fund distribution wallet with minimum XLM
+    // await stellarService.fundWalletFromTreasury(
+    //   walletResult.distributionWallet.publicKey,
+    //   '2' // 2 XLM for operations
+    // );
 
     // Update property with wallet information
     await property.update({
-      stellarAssetCode: `PROP${property.id.substring(0, 8).toUpperCase()}`,
+      stellarAssetCode: `PROP${propertyId.substring(0, 8).toUpperCase()}`,
       stellarAssetIssuer: walletResult.distributionWallet.publicKey,
     });
 
-    logger.info(`Standalone property wallets created for ${property.title}`);
+    logger.info(
+      `Property wallets created for ${property.title}: Distribution ${walletResult.distributionWallet.publicKey}`
+    );
 
     res.status(201).json({
       message: "Property wallets created successfully",

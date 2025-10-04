@@ -734,7 +734,7 @@ router.post(
  * GET /api/multisig/wallet/:publicKey
  */
 router.get(
-  "/wallet/:publicKey",
+  "/get-wallet-info/:publicKey",
   authenticate,
   requireAdmin,
   validatePublicKey,

@@ -5,7 +5,6 @@ import { Response } from "express";
 import { AuthRequest } from "../middleware/auth";
 import { stellarService } from "../services/stellarService";
 import User from "../models/User";
-import Property from "../models/Property";
 import MultiSigWallet from "../models/MultiSigWallet";
 import logger from "../utils/logger";
 import MultiSigSigner from "../models/MultiSigSigner";
@@ -419,87 +418,7 @@ export const listTreasuryWallets = async (req: AuthRequest, res: Response) => {
 // PROPERTY-SPECIFIC MULTISIG WALLETS
 // ===========================================
 
-export const createPropertyWallets = async (
-  req: AuthRequest,
-  res: Response
-) => {
-  try {
-    const { propertyId } = req.params;
 
-    if (!propertyId) {
-      return res.status(400).json({ error: "Property ID is required" });
-    }
-
-    // Verify property exists
-    const property = await Property.findByPk(propertyId);
-    if (!property) {
-      return res.status(404).json({ error: "Property not found" });
-    }
-
-    // Check if property wallets already exist
-    const existingWallet = await MultiSigWallet.findOne({
-      where: { propertyId, walletType: "property_distribution" },
-    });
-
-    if (existingWallet) {
-      return res.status(400).json({
-        error: "Property wallets already exist",
-        distributionWallet: existingWallet.stellarPublicKey,
-      });
-    }
-
-    // Create property-specific wallets
-    const walletResult = await stellarService.createPropertyWallets({
-      propertyId: property.id,
-      propertyTitle: property.title,
-      propertyManagerPublicKey: property.propertyManagerPublicKey,
-      createdBy: req.user!.id,
-    });
-
-    // // Fund distribution wallet with minimum XLM
-    // await stellarService.fundWalletFromTreasury(
-    //   walletResult.distributionWallet.publicKey,
-    //   '2' // 2 XLM for operations
-    // );
-
-    // Update property with wallet information
-    await property.update({
-      stellarAssetCode: `PROP${propertyId.substring(0, 8).toUpperCase()}`,
-      stellarAssetIssuer: walletResult.distributionWallet.publicKey,
-    });
-
-    logger.info(
-      `Property wallets created for ${property.title}: Distribution ${walletResult.distributionWallet.publicKey}`
-    );
-
-    res.status(201).json({
-      message: "Property wallets created successfully",
-      property: {
-        id: property.id,
-        title: property.title,
-      },
-      wallets: {
-        distribution: {
-          publicKey: walletResult.distributionWallet.publicKey,
-          purpose: "Holds property tokens for sale to investors",
-          funded: true,
-        },
-        governance: walletResult.governanceWallet
-          ? {
-              publicKey: walletResult.governanceWallet.publicKey,
-              purpose: "Property governance and major decisions",
-            }
-          : null,
-      },
-    });
-  } catch (error) {
-    logger.error("Create property wallets error:", error);
-    res.status(500).json({
-      error: "Failed to create property wallets",
-      details: error instanceof Error ? error.message : "Unknown error",
-    });
-  }
-};
 
 // ===========================================
 // WALLET RECOVERY OPERATIONS
@@ -856,78 +775,6 @@ export const listUserWallets = async (req: AuthRequest, res: Response) => {
 // // UTILITY FUNCTIONS
 // // ===========================================
 
-// export const getWalletInfo = async (req: AuthRequest, res: Response) => {
-//   try {
-//     const { publicKey } = req.params;
-
-//     if (!publicKey) {
-//       return res.status(400).json({ error: 'Public key is required' });
-//     }
-
-//     const walletInfo = await stellarService.getWalletDetails(publicKey);
-//     const dbWallet = await MultiSigWallet.findOne({
-//       where: { stellarPublicKey: publicKey },
-//       include: ['signers', 'transactions']
-//     });
-
-//     res.json({
-//       stellarAccount: walletInfo.account,
-//       walletData: dbWallet,
-//       signers: walletInfo.signers,
-//       thresholds: walletInfo.thresholds,
-//       balances: walletInfo.balances
-//     });
-
-//   } catch (error) {
-//     logger.error('Get wallet info error:', error);
-//     res.status(500).json({
-//       error: 'Failed to get wallet information',
-//       details: error instanceof Error ? error.message : 'Unknown error'
-//     });
-//   }
-// };
-
-// export const listUserWallets = async (req: AuthRequest, res: Response) => {
-//   try {
-//     const userId = req.user!.id;
-
-//     const wallets = await MultiSigWallet.findAll({
-//       where: { userId },
-//       attributes: ['id', 'stellarPublicKey', 'walletType', 'status', 'createdAt'],
-//       order: [['createdAt', 'DESC']]
-//     });
-
-//     const walletsWithBalances = await Promise.all(
-//       wallets.map(async (wallet) => {
-//         try {
-//           const balances = await stellarService.getAccountBalance(wallet.stellarPublicKey);
-//           return {
-//             ...wallet.toJSON(),
-//             balances
-//           };
-//         } catch (error: any) {
-//           return {
-//             ...wallet.toJSON(),
-//             balances: [],
-//             balanceError: 'Failed to load balance'
-//           };
-//         }
-//       })
-//     );
-
-//     res.json({
-//       wallets: walletsWithBalances,
-//       count: walletsWithBalances.length
-//     });
-
-//   } catch (error) {
-//     logger.error('List user wallets error:', error);
-//     res.status(500).json({
-//       error: 'Failed to list user wallets',
-//       details: error instanceof Error ? error.message : 'Unknown error'
-//     });
-//   }
-// };
 
 // // export const getGovernanceProposals = async (req: AuthRequest, res: Response) => {
 // //   try {

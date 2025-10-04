@@ -1,5 +1,5 @@
-import { DataTypes, Model, Optional } from 'sequelize';
-import { sequelize } from '../config/database';
+import { DataTypes, Model, Optional } from "sequelize";
+import { sequelize } from "../config/database";
 
 interface PropertyAttributes {
   id: string;
@@ -18,6 +18,7 @@ interface PropertyAttributes {
   documents?: object;
   locationDetails?: object;
   rentalIncomeMonthly?: number;
+  propertyManager?: string;
   propertyManagerPublicKey?: string;
   status: string;
   stellarAssetCode?: string;
@@ -27,9 +28,15 @@ interface PropertyAttributes {
   updatedAt?: Date;
 }
 
-type PropertyCreationAttributes = Optional<PropertyAttributes, 'id' | 'createdAt' | 'updatedAt'>
+type PropertyCreationAttributes = Optional<
+  PropertyAttributes,
+  "id" | "createdAt" | "updatedAt"
+>;
 
-class Property extends Model<PropertyAttributes, PropertyCreationAttributes> implements PropertyAttributes {
+class Property
+  extends Model<PropertyAttributes, PropertyCreationAttributes>
+  implements PropertyAttributes
+{
   public id!: string;
   public title!: string;
   public description?: string;
@@ -46,6 +53,7 @@ class Property extends Model<PropertyAttributes, PropertyCreationAttributes> imp
   public documents?: object;
   public locationDetails?: object;
   public rentalIncomeMonthly?: number;
+  public propertyManager?: string;
   public propertyManagerPublicKey?: string;
   public status!: string;
   public stellarAssetCode?: string;
@@ -76,8 +84,13 @@ Property.init(
       allowNull: false,
     },
     propertyType: {
-      type: DataTypes.ENUM('residential', 'commercial', 'mixed_use', 'industrial'),
-      defaultValue: 'residential',
+      type: DataTypes.ENUM(
+        "residential",
+        "commercial",
+        "mixed_use",
+        "industrial"
+      ),
+      defaultValue: "residential",
     },
     totalTokens: {
       type: DataTypes.INTEGER,
@@ -135,13 +148,23 @@ Property.init(
       type: DataTypes.DECIMAL(10, 2),
       allowNull: true,
     },
+    propertyManager: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
     propertyManagerPublicKey: {
       type: DataTypes.STRING,
       allowNull: true,
     },
     status: {
-      type: DataTypes.ENUM('active', 'coming_soon', 'sold_out', 'maintenance', 'inactive'),
-      defaultValue: 'active',
+      type: DataTypes.ENUM(
+        "active",
+        "coming_soon",
+        "sold_out",
+        "maintenance",
+        "inactive"
+      ),
+      defaultValue: "active",
     },
     stellarAssetCode: {
       type: DataTypes.STRING,
@@ -158,19 +181,19 @@ Property.init(
   },
   {
     sequelize,
-    modelName: 'Property',
-    tableName: 'properties',
+    modelName: "Property",
+    tableName: "properties",
     indexes: [
-      { fields: ['location'] },
-      { fields: ['propertyType'] },
-      { fields: ['status'] },
-      { fields: ['featured'] },
-      { fields: ['tokenPrice'] },
+      { fields: ["location"] },
+      { fields: ["propertyType"] },
+      { fields: ["status"] },
+      { fields: ["featured"] },
+      { fields: ["tokenPrice"] },
     ],
     validate: {
       availableTokensValid(this: Property) {
         if (this.availableTokens > this.totalTokens) {
-          throw new Error('Available tokens cannot exceed total tokens');
+          throw new Error("Available tokens cannot exceed total tokens");
         }
       },
     },
