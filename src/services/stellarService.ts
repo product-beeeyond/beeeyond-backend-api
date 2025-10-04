@@ -107,95 +107,133 @@ class StellarService {
    * This method manages recovery keys in batches to balance security and operational complexity
    */
   private async getBatchedRecoveryKey(): Promise<{
-    keypair: Keypair;
-    publicKey: () => string;
-    secret: () => string;
-    batchId: string;
-  }> {
-    try {
-      // Count total user wallets created
-      const totalUserWallets = await MultiSigWallet.count({
-        where: {
-          walletType: "user",
-          status: "active",
-        },
-      });
-
-      // Calculate current batch number (0-indexed)
-      const currentBatch = Math.floor(totalUserWallets / 1000);
-      const batchId = `recovery_batch_${currentBatch}`;
-
-      // Check if current batch recovery key already exists
-      // let existingBatchKey = null;
-      try {
-        const existingKeypair = await secureWalletService.retrieveWalletSecret(
-          batchId,
-          "platform_recovery_batch"
-        );
-
-        if (existingKeypair) {
-          const keypair = Keypair.fromSecret(existingKeypair);
-          logger.info(
-            `Using existing recovery batch ${currentBatch} for wallet ${
-              totalUserWallets + 1
-            }`
-          );
-
-          return {
-            keypair,
-            publicKey: () => keypair.publicKey(),
-            secret: () => keypair.secret(),
-            batchId,
-          };
-        }
-      } catch (error) {
-        // Key doesn't exist yet, will create new one below
-        logger.info(
-          `Recovery batch ${currentBatch} not found, creating new batch key`
-        );
-      }
-
-      // Generate new recovery key for this batch
-      const newBatchKeypair = Keypair.random();
-
-      // Store the new batch key globally
-      await secureWalletService.storeWalletSecret(
-        batchId,
-        "platform_recovery_batch",
-        newBatchKeypair.secret(),
-        {
-          publicKey: newBatchKeypair.publicKey(),
-          role: "platform_recovery_batch",
-          batchNumber: String(currentBatch),
-          batchSize: String(1000),
-          createdAt: new Date().toISOString(),
-          description: `Platform recovery key for wallets ${
+  keypair: Keypair;
+  publicKey: () => string;
+  secret: () => string;
+  batchId: string;
+}> {
+  try { 
+    const totalUserWallets = await MultiSigWallet.count({
+      where: {
+        walletType: "user",
+        status: "active",
+      },
+    });
+    
+    const currentBatch = Math.floor(totalUserWallets / 1000);
+    const batchId = `recovery_batch_${currentBatch}`;
+    
+    // Find existing batch wallet using createdTxHash
+    let batchWallet = await MultiSigWallet.findOne({
+      where: {
+        walletType: "platform_recovery_batch",
+        status: "active",
+        createdTxHash: batchId, // Use createdTxHash to store batch identifier
+      },
+    });
+    
+    // Create batch wallet if it doesn't exist
+    if (!batchWallet) {
+      // Generate a temporary keypair just for the public key
+      const tempKeypair = Keypair.random();
+      
+      batchWallet = await MultiSigWallet.create({
+        stellarPublicKey: tempKeypair.publicKey(), // Placeholder, will be updated
+        walletType: "platform_recovery_batch",
+        status: "active",
+        lowThreshold: 0,
+        mediumThreshold: 0,
+        highThreshold: 0,
+        masterWeight: 0,
+        createdTxHash: batchId, // Store batch identifier here
+        metadata: {
+          description: `Platform recovery key batch for wallets ${
             currentBatch * 1000
           } to ${(currentBatch + 1) * 1000 - 1}`,
-        }
-      );
-
+          createdAt: new Date().toISOString(),
+          phase: "recovery_batch",
+        },
+      });
+      
       logger.info(
-        `Created new recovery keypair batch ${currentBatch} for wallets ${
-          currentBatch * 1000
-        }-${(currentBatch + 1) * 1000 - 1}`
-      );
-
-      return {
-        keypair: newBatchKeypair,
-        publicKey: () => newBatchKeypair.publicKey(),
-        secret: () => newBatchKeypair.secret(),
-        batchId,
-      };
-    } catch (error) {
-      logger.error("Error managing batched recovery key:", error);
-      throw new Error(
-        `Failed to get/create batched recovery key: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`
+        `Created batch wallet record ${batchId} with ID ${batchWallet.id}`
       );
     }
+    
+    // Try to retrieve existing keypair using the wallet's UUID
+    try {
+      const existingKeypair = await secureWalletService.retrieveWalletSecret(
+        batchWallet.id,
+        "platform_recovery_batch"
+      );
+      
+      if (existingKeypair) {
+        const keypair = Keypair.fromSecret(existingKeypair);
+        logger.info(
+          `Using existing recovery batch ${currentBatch} for wallet ${
+            totalUserWallets + 1
+          }`
+        );
+        return {
+          keypair,
+          publicKey: () => keypair.publicKey(),
+          secret: () => keypair.secret(),
+          batchId,
+        };
+      }
+    } catch (error) {
+      logger.info(
+        `Recovery batch ${currentBatch} not found, creating new batch key`
+      );
+    }
+    
+    // Generate new recovery key for this batch
+    const newBatchKeypair = Keypair.random();
+    
+    // Update the wallet with the actual public key
+    await batchWallet.update({
+      stellarPublicKey: newBatchKeypair.publicKey(),
+    });
+    
+    // Store using the wallet's UUID
+    await secureWalletService.storeWalletSecret(
+      batchWallet.id,
+      "platform_recovery_batch",
+      newBatchKeypair.secret(),
+      {
+        publicKey: newBatchKeypair.publicKey(),
+        role: "platform_recovery_batch",
+        batchNumber: String(currentBatch),
+        batchSize: String(1000),
+        batchIdentifier: batchId,
+        createdAt: new Date().toISOString(),
+        description: `Platform recovery key for wallets ${
+          currentBatch * 1000
+        } to ${(currentBatch + 1) * 1000 - 1}`,
+      }
+    );
+    
+    logger.info(
+      `Created new recovery keypair batch ${currentBatch} for wallets ${
+        currentBatch * 1000
+      }-${(currentBatch + 1) * 1000 - 1}`
+    );
+    
+    return {
+      keypair: newBatchKeypair,
+      publicKey: () => newBatchKeypair.publicKey(),
+      secret: () => newBatchKeypair.secret(),
+      batchId,
+    };
+  } catch (error) {
+    logger.error("Error managing batched recovery key:", error);
+    throw new Error(
+      `Failed to get/create batched recovery key: ${
+        error instanceof Error ? error.message : "Unknown error"
+      }`
+    );
   }
+}
   constructor() {
     this.validateEnvironmentVariables();
     this.network =
@@ -1523,7 +1561,7 @@ class StellarService {
       ]);
 
       logger.info(
-        `Platform issuer wallet created: ${walletKeypair.publicKey()} with ${requiredBalance} XLM`
+        `Platform primary wallet created: ${walletKeypair.publicKey()} with ${requiredBalance} XLM`
       );
 
       return {

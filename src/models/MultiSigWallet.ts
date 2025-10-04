@@ -10,9 +10,10 @@ interface MultiSigWalletAttributes {
   stellarPublicKey: string;
   walletType:
     | "user"
-    |"platform_primary"
+    | "platform_primary"
     | "platform_treasury"
     | "platform_issuer"
+    | "platform_recovery_batch"
     | "platform_distribution"
     | "platform_fee_collection"
     | "property_distribution"
@@ -65,6 +66,7 @@ class MultiSigWallet
     | "platform_primary"
     | "platform_treasury"
     | "platform_issuer"
+    | "platform_recovery_batch"
     | "platform_distribution"
     | "platform_fee_collection"
     | "property_distribution"
@@ -152,6 +154,7 @@ MultiSigWallet.init(
         "platform_primary",
         "platform_treasury",
         "platform_issuer",
+        "platform_recovery_batch",
         "platform_distribution",
         "platform_fee_collection",
         "property_distribution",
@@ -204,9 +207,9 @@ MultiSigWallet.init(
     createdTxHash: {
       type: DataTypes.STRING,
       allowNull: true,
-      validate: {
-        len: [64, 64], // Stellar transaction hashes are 64 characters
-      },
+      // validate: {
+      //   len: [64, 64], // Stellar transaction hashes are 64 characters. Relaxed for holding recovery batched  id
+      // },
     },
     metadata: {
       type: DataTypes.JSONB,

@@ -554,7 +554,7 @@ const validatePublicKey = (req: any, res: any, next: any) => {
 
 const validateCreatePlatformWallet = (req: any, res: any, next: any) => {
   const { walletType, description } = req.body;
-  const validTypes = ["treasury", "issuer", "distribution", "fee_collection"];
+  const validTypes = ["primary", "issuer"];
 
   if (!walletType || !validTypes.includes(walletType)) {
     return res.status(400).json({
@@ -562,9 +562,9 @@ const validateCreatePlatformWallet = (req: any, res: any, next: any) => {
     });
   }
 
-  if (!description || description.trim().length < 10) {
+  if (description && description.trim().length >200) {
     return res.status(400).json({
-      error: "Description must be at least 10 characters long",
+      error: "Description must be less than 200 characters long",
     });
   }
 
@@ -660,7 +660,7 @@ const validateCreatePlatformWallet = (req: any, res: any, next: any) => {
  * Create recovery wallet for KYC-verified user
  * POST /api/multisig/user/wallet
  */
-router.post("/user/wallet", authenticate, requireKYC, createUserMultisigWallet);
+router.post("/create-user-wallet", authenticate, requireKYC, createUserMultisigWallet);
 
 /**
  * List user's multisig wallets
@@ -689,7 +689,7 @@ router.get("/user/wallets", authenticate, listUserWallets);
  * POST /api/multisig/platform/wallets
  */
 router.post(
-  "/platform/wallets",
+  "/create-platform-wallet",
   authenticate,
   requireSuperAdmin,
   validateCreatePlatformWallet,
