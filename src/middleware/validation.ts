@@ -108,34 +108,34 @@ export const createPropertySchema = Joi.object({
 
   totalTokens: Joi.number()
     .integer()
-    .min(100)
-    .max(10000000)
+    .min(10)
+    // .max(10000000)
     .required()
     .messages({
       "number.base": "Total tokens must be a number",
       "number.integer": "Total tokens must be an integer",
-      "number.min": "Total tokens must be at least 100",
-      "number.max": "Total tokens cannot exceed 10,000,000",
+      "number.min": "Total tokens must be at least 10",
+      // "number.max": "Total tokens cannot exceed 10,000,000",
       "any.required": "Total tokens is required",
     }),
 
   tokenPrice: Joi.number()
     .positive()
-    .min(100)
-    .max(1000000)
+    .min(1)
+    // .max(1000000)
     .required()
     .messages({
       "number.base": "Token price must be a number",
       "number.positive": "Token price must be positive",
-      "number.min": "Token price must be at least ₦100",
-      "number.max": "Token price cannot exceed ₦1,000,000",
+      "number.min": "Token price must be at least ₦1",
+      // "number.max": "Token price cannot exceed ₦1,000,000",
       "any.required": "Token price is required",
     }),
 
-  totalValue: Joi.number().positive().optional().messages({
-    "number.base": "Total value must be a number",
-    "number.positive": "Total value must be positive",
-  }),
+  // totalValue: Joi.number().positive().optional().messages({
+  //   "number.base": "Total value must be a number",
+  //   "number.positive": "Total value must be positive",
+  // }),
 
   expectedAnnualReturn: Joi.number().min(0).max(100).optional().messages({
     "number.base": "Expected annual return must be a number",
@@ -143,7 +143,7 @@ export const createPropertySchema = Joi.object({
     "number.max": "Expected annual return cannot exceed 100%",
   }),
 
-  minimumInvestment: Joi.number().positive().default(10000).messages({
+  minimumInvestment: Joi.number().positive().messages({
     "number.base": "Minimum investment must be a number",
     "number.positive": "Minimum investment must be positive",
   }),
@@ -183,7 +183,11 @@ export const createPropertySchema = Joi.object({
     .messages({
       "string.pattern.base": "Invalid Stellar public key format",
     }),
-
+  propertyManager: Joi.string().min(3).max(200).required().messages({
+    "string.min": "Property manager must be at least 3 characters",
+    "string.max": "Property manager field too long (max 200 characters)",
+    "any.required": "Property manager is required",
+  }),
   featured: Joi.boolean().default(false).messages({
     "boolean.base": "Featured must be true or false",
   }),
@@ -446,10 +450,10 @@ export const validatePropertyCreation = (data: any) => {
 
   // Additional business rule validations
   const businessRuleErrors = [];
-
+  let calculatedValue = 0;
   // Total value should match tokens * price if provided
-  if (value.totalValue && value.totalTokens && value.tokenPrice) {
-    const calculatedValue = value.totalTokens * value.tokenPrice;
+  if (value.totalTokens && value.tokenPrice) {
+    calculatedValue = value.totalTokens * value.tokenPrice;
     const tolerance = calculatedValue * 0.01; // 1% tolerance
 
     if (Math.abs(value.totalValue - calculatedValue) > tolerance) {
@@ -461,10 +465,10 @@ export const validatePropertyCreation = (data: any) => {
   }
 
   // Minimum investment should not exceed token price
-  if (value.minimumInvestment > value.tokenPrice) {
+  if (value.minimumInvestment > calculatedValue) {
     businessRuleErrors.push({
       field: "minimumInvestment",
-      message: "Minimum investment cannot exceed token price",
+      message: "Minimum investment cannot exceed total value",
     });
   }
 

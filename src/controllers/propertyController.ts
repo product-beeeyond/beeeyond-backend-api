@@ -11,14 +11,22 @@ import { sequelize } from "../config/database";
 import { Op, Transaction } from "sequelize";
 // import { validate, propertySchema } from "../middleware/validation";
 import MultiSigTransaction from "../models/MultiSigTransaction";
+import { validatePropertyCreation } from "../middleware/validation";
 
 // ===========================================
 // CREATE PROPERTY WITH FULL TOKENIZATION FLOW
 // ===========================================
 
 export const CreateProperty = async (req: AuthRequest, res: Response) => {
-  const dbTransaction = await sequelize.transaction();
-
+  const { isValid, errors } = validatePropertyCreation(req.body);
+  if (!isValid) {
+    return res.status(400).json({
+      error: `Create property validation error`,
+      details: errors,
+    });
+  }
+  // const dbTransaction = await sequelize.transaction();
+  console.log("got here");
   try {
     const {
       title,
@@ -41,7 +49,7 @@ export const CreateProperty = async (req: AuthRequest, res: Response) => {
 
     // Validate required fields
     if (!title || !location || !propertyType || !totalTokens || !tokenPrice) {
-      await dbTransaction.rollback();
+      // await dbTransaction.rollback();
       return res.status(400).json({
         error:
           "Missing required fields: title, location, propertyType, totalTokens, tokenPrice",
@@ -63,7 +71,7 @@ export const CreateProperty = async (req: AuthRequest, res: Response) => {
         tokenPrice,
         totalValue: calculatedTotalValue,
         expectedAnnualReturn,
-        minimumInvestment: minimumInvestment || 10000,
+        minimumInvestment: minimumInvestment,
         images: images || [],
         amenities: amenities || [],
         documents,
@@ -74,7 +82,7 @@ export const CreateProperty = async (req: AuthRequest, res: Response) => {
         status: "coming_soon", // Start as coming_soon until fully set up
         featured: featured || false,
       },
-      { transaction: dbTransaction }
+      // { transaction: dbTransaction }
     );
 
     logger.info(`Property created: ${property.id} - ${title}`);
@@ -110,11 +118,11 @@ export const CreateProperty = async (req: AuthRequest, res: Response) => {
         stellarAssetIssuer: tokenizationResult.assetIssuer,
         status: "active", // Now fully set up and ready for investment
       },
-      { transaction: dbTransaction }
+      // { transaction: dbTransaction }
     );
 
     // Commit the transaction
-    await dbTransaction.commit();
+    // await dbTransaction.commit();
 
     logger.info(
       `Property ${property.title} fully tokenized with ${totalTokens} ${tokenizationResult.assetCode} tokens`
@@ -166,7 +174,7 @@ export const CreateProperty = async (req: AuthRequest, res: Response) => {
       },
     });
   } catch (error) {
-    await dbTransaction.rollback();
+    // await dbTransaction.rollback();
     logger.error("Create property error:", error);
 
     // Handle specific error types

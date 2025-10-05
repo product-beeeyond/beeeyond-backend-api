@@ -8,7 +8,6 @@ import {
   requireSuperAdmin,
 } from "../middleware/auth";
 import {
-  validatePropertyCreation,
   validatePropertyUpdate,
 } from "../middleware/validation";
 import {
@@ -373,7 +372,6 @@ router.post(
   "/create-property",
   authenticate,
   requireAdmin,
-  validatePropertyCreation,
   CreateProperty
 );
 
