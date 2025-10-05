@@ -1887,7 +1887,7 @@ class StellarService {
         signers: [
           {
             publicKey: (await this.getPlatformKeypair("platform")).publicKey(),
-            role: "platform_distribution",
+            role: "property_distribution",
           },
           {
             publicKey: propertyManagerKey.publicKey(),
@@ -2948,7 +2948,7 @@ class StellarService {
               multiSigWalletId: wallet.id,
               role: {
                 [Op.in]: [
-                  "platform_distribution",
+                  "property_distribution",
                   "platform_issuer",
                   "platform_primary",
                 ],
