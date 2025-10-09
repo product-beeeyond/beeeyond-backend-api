@@ -25,6 +25,7 @@ import {
 import { sequelize } from "../config/database";
 import { secureWalletService } from "./secureWalletService";
 import EncryptedSecret from "../models/EncryptedSecret";
+import Property from "../models/Property";
 
 // Reserve calculation constants
 const BASE_RESERVE = 0.5; // XLM per account
@@ -2500,15 +2501,24 @@ class StellarService {
     totalSupply: number;
     distributionWalletPublicKey: string;
   }) {
+    const transaction = await sequelize.transaction();
+
     try {
       const { propertyId, totalSupply, distributionWalletPublicKey } = params;
+      await Property.findOne({ transaction, lock: transaction.LOCK.UPDATE });
 
+      const propertyCount = await Property.count({
+        transaction,
+      });
+      const nextNumber = propertyCount + 1;
+      const assetCode = `BRKL${String(nextNumber).padStart(8, "0")}`; // uses full 12 chars
       // Create asset code (max 12 characters for custom assets)
-      const assetCode = `PROP${propertyId.substring(0, 8).toUpperCase()}`;
+      // const assetCode = `BRIKL${propertyId.substring(0, 8).toUpperCase()}`;
 
       // Get platform issuer wallet
       const issuerWallet = await MultiSigWallet.findOne({
         where: { walletType: "platform_issuer" },
+        transaction,
       });
 
       if (!issuerWallet) {
@@ -2524,7 +2534,15 @@ class StellarService {
       }
 
       const asset = new Asset(assetCode, issuerWallet.stellarPublicKey);
+      await Property.update(
+        { stellarAssetCode: assetCode },
+        {
+          where: { id: propertyId }, 
+          transaction,
+        }
+      );
 
+       await transaction.commit();
       // Ensure distribution wallet has trustline for the new asset
       await this.ensureTrustlines(distributionWalletPublicKey, [
         { assetCode, assetIssuer: issuerWallet.stellarPublicKey },
@@ -2536,7 +2554,7 @@ class StellarService {
       );
 
       // Create transaction to mint tokens
-      const transaction = new TransactionBuilder(issuerAccount, {
+      const mintTransaction = new TransactionBuilder(issuerAccount, {
         fee: BASE_FEE,
         networkPassphrase: this.network,
       })
@@ -2551,11 +2569,11 @@ class StellarService {
         .build();
 
       // Sign with platform issuer key
-      transaction.sign(await this.getPlatformKeypair("platform"));
+      mintTransaction.sign(await this.getPlatformKeypair("platform"));
 
       // Submit transaction with fee bump sponsorship
       const result = await this.submitTransactionWithFeeBump(
-        transaction,
+        mintTransaction,
         await this.getPlatformKeypair("platform")
       );
 
