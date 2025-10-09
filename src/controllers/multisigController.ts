@@ -414,10 +414,6 @@ export const listTreasuryWallets = async (req: AuthRequest, res: Response) => {
     });
   }
 };
-// ===========================================
-// PROPERTY-SPECIFIC MULTISIG WALLETS
-// ===========================================
-
 
 
 // ===========================================
@@ -566,6 +562,65 @@ export const listUserWallets = async (req: AuthRequest, res: Response) => {
   }
 };
 
+/**
+ * Fund user wallet with bNGN tokens
+ * POST /api/multisig/fund-bngn
+ */
+export const fundBNGN = async (req: AuthRequest, res: Response) => {
+  try {
+    const { destinationPublicKey, amount } = req.body;
+
+    if (!destinationPublicKey || destinationPublicKey.length !== 56) {
+      return res.status(400).json({
+        error: "Valid destination public key is required (56 characters)",
+      });
+    }
+    if (!amount || parseFloat(amount) <= 0) {
+      return res.status(400).json({
+        error: "Amount must be a positive number",
+      });
+    }
+
+    // Check if destination account exists
+    try {
+      await stellarService.getWalletDetails(destinationPublicKey);
+    } catch (error) {
+      return res.status(404).json({
+        error: "Destination account not found on Stellar network",
+      });
+    }
+
+    // Issue and send bNGN
+    const result = await stellarService.issueBNGN({
+      destinationPublicKey,
+      amount: amount.toString(),
+      issuedBy: req.user!.id,
+    });
+
+    logger.info(
+      `bNGN funded: ${amount} bNGN to ${destinationPublicKey} by ${req.user!.email}`
+    );
+
+    res.status(200).json({
+      message: "bNGN funding successful",
+      transaction: {
+        hash: result.transactionHash,
+        destination: destinationPublicKey,
+        amount: amount.toString(),
+        asset: "bNGN",
+        assetIssuer: result.issuerPublicKey,
+        timestamp: new Date().toISOString(),
+        issuedBy: req.user!.email,
+      },
+    });
+  } catch (error) {
+    logger.error("Fund bNGN error:", error);
+    res.status(500).json({
+      error: "Failed to fund bNGN",
+      details: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+};
 // export const getGovernanceProposals = async (req: AuthRequest, res: Response) => {
 //   try {
 //     const userId = req.user!.id;

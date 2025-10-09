@@ -525,8 +525,8 @@ import {
   listUserWallets,
   createPlatformTreasury,
   finalizePlatformTreasury,
+  fundBNGN
 } from "../controllers/multisigController";
-
 const router = Router();
 
 // ===========================================
@@ -553,7 +553,7 @@ const validateCreatePlatformWallet = (req: any, res: any, next: any) => {
     });
   }
 
-  if (description && description.trim().length >200) {
+  if (description && description.trim().length > 200) {
     return res.status(400).json({
       error: "Description must be less than 200 characters long",
     });
@@ -651,13 +651,18 @@ const validateCreatePlatformWallet = (req: any, res: any, next: any) => {
  * Create recovery wallet for KYC-verified user
  * POST /api/multisig/user/wallet
  */
-router.post("/create-user-wallet", authenticate, requireKYC, createUserMultisigWallet);
+router.post(
+  "/create-user-wallet",
+  authenticate,
+  requireKYC,
+  createUserMultisigWallet
+);
 
 /**
  * List user's multisig wallets
  * GET /api/multisig/user/wallets
  */
-router.get("/user/wallets", authenticate, listUserWallets);
+router.get("/all-wallets-by-user", authenticate, listUserWallets);
 
 /** ---DEPRECATED----
  * Recover user wallet (Admin only)
@@ -720,7 +725,16 @@ router.get(
 // ===========================================
 // MULTISIG TRANSACTION ROUTES
 // ===========================================
-
+/**
+ * Fund user wallet with bNGN (Admin only)
+ * POST /multisig/wallet/fund-bngn
+ */
+router.post(
+  "/fund-bngn",
+  authenticate,
+  requireAdmin,
+ fundBNGN
+);
 /**
  * Propose a multisig transaction
  * POST /api/multisig/transactions/propose

@@ -463,15 +463,14 @@ class StellarService {
       const wallet = await MultiSigWallet.findOne({
         where: { stellarPublicKey: walletPublicKey },
       });
-
-      if (!wallet || !wallet.signers?.[0]) {
-        throw new Error("Recovery signer not found for wallet");
+      if (!wallet) {
+        throw new Error("Wallet not found");
       }
 
-      const recoverySignerSecretId = wallet.signers[0].encryptedSecretId;
-      if (!recoverySignerSecretId) {
-        throw new Error("Recovery signer secret ID not found");
-      }
+      // const recoverySignerSecretId = wallet.signers[0].encryptedSecretId;
+      // if (!recoverySignerSecretId) {
+      //   throw new Error("Recovery signer secret ID not found");
+      // }
 
       // Retrieve the recovery keypair
       const secret = await secureWalletService.retrieveWalletSecret(
@@ -1255,9 +1254,9 @@ class StellarService {
         )
         .addOperation(
           Operation.setOptions({
-            lowThreshold: MULTISIG_CONFIG.PLATFORM_ISSUER.LOW_THRESHOLD, // 1 - 1-of-2 for routine issuance
-            medThreshold: MULTISIG_CONFIG.PLATFORM_ISSUER.MEDIUM_THRESHOLD, // 2 - 2-of-2 for account changes
-            highThreshold: MULTISIG_CONFIG.PLATFORM_ISSUER.HIGH_THRESHOLD, // 2 - 2-of-2 for auth flags
+            lowThreshold: MULTISIG_CONFIG.PLATFORM_ISSUER.LOW_THRESHOLD, // 1  1-of-2 for routine issuance
+            medThreshold: MULTISIG_CONFIG.PLATFORM_ISSUER.MEDIUM_THRESHOLD, // 2  2-of-2 for account changes
+            highThreshold: MULTISIG_CONFIG.PLATFORM_ISSUER.HIGH_THRESHOLD, // 2  2-of-2 for auth flags
             masterWeight: MULTISIG_CONFIG.PLATFORM_ISSUER.MASTER_WEIGHT, // 0
           })
         )
@@ -2511,7 +2510,7 @@ class StellarService {
         transaction,
       });
       const nextNumber = propertyCount + 1;
-      const assetCode = `BRKL${String(nextNumber).padStart(8, "0")}`; // uses full 12 chars
+      const assetCode = `BRKL${String(nextNumber).padStart(5, "0")}`; //
       // Create asset code (max 12 characters for custom assets)
       // const assetCode = `BRIKL${propertyId.substring(0, 8).toUpperCase()}`;
 
@@ -2537,12 +2536,12 @@ class StellarService {
       await Property.update(
         { stellarAssetCode: assetCode },
         {
-          where: { id: propertyId }, 
+          where: { id: propertyId },
           transaction,
         }
       );
 
-       await transaction.commit();
+      await transaction.commit();
       // Ensure distribution wallet has trustline for the new asset
       await this.ensureTrustlines(distributionWalletPublicKey, [
         { assetCode, assetIssuer: issuerWallet.stellarPublicKey },
@@ -2593,6 +2592,86 @@ class StellarService {
     }
   }
 
+  /**
+   * Issue bNGN tokens on demand to a destination wallet
+   */
+  async issueBNGN(params: {
+    destinationPublicKey: string;
+    amount: string;
+    issuedBy: string;
+  }): Promise<{
+    transactionHash: string;
+    issuerPublicKey: string;
+    amount: string;
+  }> {
+    try {
+      const { destinationPublicKey, amount, issuedBy } = params;
+
+      const parsedAmount = parseFloat(amount);
+      if (isNaN(parsedAmount) || parsedAmount <= 0) {
+        throw new Error("Invalid amount: must be a positive number");
+      }
+      const issuerWallet = await MultiSigWallet.findOne({
+        where: { walletType: "platform_issuer", status: "active" },
+      });
+
+      if (!issuerWallet) {
+        throw new Error("Platform issuer wallet not found or not active");
+      }
+      const bNGNAsset = new Asset("bNGN", issuerWallet.stellarPublicKey);
+
+      // Ensure destination wallet has trustline for bNGN
+      await this.ensureTrustlines(destinationPublicKey, [
+        { assetCode: "bNGN", assetIssuer: issuerWallet.stellarPublicKey },
+      ]);
+      console.log("got here xx---------------------------------------");
+      const issuerAccount = await this.server.loadAccount(
+        issuerWallet.stellarPublicKey
+      );
+
+      const transaction = new TransactionBuilder(issuerAccount, {
+        fee: BASE_FEE,
+        networkPassphrase: this.network,
+      })
+        .addOperation(
+          Operation.payment({
+            destination: destinationPublicKey,
+            asset: bNGNAsset,
+            amount: parsedAmount.toFixed(7),
+          })
+        )
+        .setTimeout(180)
+        .build();
+
+      transaction.sign(await this.getPlatformKeypair("platform"));
+
+      const result = await this.submitTransactionWithFeeBump(
+        transaction,
+        await this.getPlatformKeypair("platform")
+      );
+
+      logger.info(
+        `bNGN issued: ${parsedAmount.toFixed(
+          7
+        )} bNGN to ${destinationPublicKey}, Hash: ${
+          result.hash
+        }, Issued by: ${issuedBy}`
+      );
+
+      return {
+        transactionHash: result.hash,
+        issuerPublicKey: issuerWallet.stellarPublicKey,
+        amount: parsedAmount.toFixed(7),
+      };
+    } catch (error: any) {
+      logger.error("Error issuing bNGN:", error?.data);
+      throw new Error(
+        `Failed to issue bNGN: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+    }
+  }
   // ===========================================
   // REVENUE DISTRIBUTION
   // ===========================================
@@ -2946,8 +3025,13 @@ class StellarService {
       });
 
       let signerKeypair: Keypair | null = null;
-
-      if (wallet) {
+      if (wallet && wallet.walletType === "user") {
+        const userSecret = await secureWalletService.retrieveWalletSecret(
+          wallet.id,
+          "user"
+        );
+        signerKeypair = Keypair.fromSecret(userSecret);
+      } else if (wallet && wallet.walletType !== "user") {
         // Try to get platform recovery signer first
         const recoverySigner = await MultiSigSigner.findOne({
           where: {
@@ -2958,7 +3042,9 @@ class StellarService {
         });
 
         if (recoverySigner) {
-          signerKeypair = await this.getRecoveryKeypairForWallet(wallet.id);
+          signerKeypair = await this.getRecoveryKeypairForWallet(
+            accountPublicKey
+          );
         } else {
           // Try other platform signers
           const platformSigner = await MultiSigSigner.findOne({
