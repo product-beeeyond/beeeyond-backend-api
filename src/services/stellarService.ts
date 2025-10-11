@@ -21,6 +21,7 @@ import {
   STELLAR_NETWORK,
   STELLAR_HORIZON_URL,
   MULTISIG_CONFIG,
+  STELLAR_RESERVES,
 } from "../config";
 import { sequelize } from "../config/database";
 import { secureWalletService } from "./secureWalletService";
@@ -28,8 +29,8 @@ import EncryptedSecret from "../models/EncryptedSecret";
 import Property from "../models/Property";
 
 // Reserve calculation constants
-const BASE_RESERVE = 0.5; // XLM per account
-const ENTRY_RESERVE = 0.5; // XLM per entry (signer, trustline, offer, data)
+// const BASE_RESERVE = 0.5; // XLM per account
+// const ENTRY_RESERVE = 0.5; // XLM per entry (signer, trustline, offer, data)
 
 interface UserWalletParams {
   userId: string;
@@ -52,10 +53,12 @@ interface PropertyWalletParams {
 interface TokenPurchaseParams {
   userWalletPublicKey: string;
   propertyWalletPublicKey: string;
+  platformWalletPublicKey: string;
   assetCode: string;
   assetIssuer: string;
-  amount: string;
-  paymentAmount: string;
+  tokenAmount: string;
+  buyAmount: string;
+  platformFee: string;
 }
 
 interface TokenSaleParams {
@@ -291,13 +294,15 @@ class StellarService {
     } = params;
 
     const totalEntries = additionalSigners + trustlines + offers + dataEntries;
-    const minimumBalance = BASE_RESERVE + totalEntries * ENTRY_RESERVE;
+    const minimumBalance =
+      STELLAR_RESERVES.BASE_RESERVE +
+      totalEntries * STELLAR_RESERVES.ENTRY_RESERVE;
 
     // Add 10% buffer for safety
     const bufferedBalance = minimumBalance * 1.1;
 
     logger.info(
-      `Calculated minimum balance: ${bufferedBalance} XLM (base: ${BASE_RESERVE}, entries: ${totalEntries})`
+      `Calculated minimum balance: ${bufferedBalance} XLM (base: ${STELLAR_RESERVES.BASE_RESERVE}, entries: ${totalEntries})`
     );
 
     return bufferedBalance.toFixed(7);
@@ -326,8 +331,8 @@ class StellarService {
     } catch (error) {
       logger.warn("Failed to get network reserves, using defaults:", error);
       return {
-        baseReserve: BASE_RESERVE,
-        entryReserve: ENTRY_RESERVE,
+        baseReserve: STELLAR_RESERVES.BASE_RESERVE,
+        entryReserve: STELLAR_RESERVES.ENTRY_RESERVE,
       };
     }
   }
@@ -353,7 +358,8 @@ class StellarService {
       const currentEntries =
         account.signers.length - 1 + account.balances.length - 1; // Subtract master key and XLM balance
       const requiredBalance =
-        BASE_RESERVE + (currentEntries + newEntries) * ENTRY_RESERVE;
+        STELLAR_RESERVES.BASE_RESERVE +
+        (currentEntries + newEntries) * STELLAR_RESERVES.ENTRY_RESERVE;
 
       logger.info(
         `Account ${publicKey}: Balance ${currentBalance} XLM, Required: ${requiredBalance} XLM`
@@ -389,7 +395,7 @@ class StellarService {
       // Create fee bump transaction with higher fee
       const feeBumpTransaction = TransactionBuilder.buildFeeBumpTransaction(
         feeSourceKeypair,
-        String(parseInt(BASE_FEE) * 2), // Use 2x base fee to ensure inclusion
+        String(parseInt(BASE_FEE) * MULTISIG_CONFIG.FEE_BUMP.FEE_MULTIPLIER), // Use 2x base fee to ensure inclusion
         innerTransaction,
         this.network
       );
@@ -1642,7 +1648,9 @@ class StellarService {
       );
       if (!hasReserves) {
         // Fund additional reserve if needed
-        const additionalFunding = (ENTRY_RESERVE * 1.1).toFixed(7); // 10% buffer
+        const additionalFunding = (
+          STELLAR_RESERVES.ENTRY_RESERVE * 1.1
+        ).toFixed(7); // 10% buffer
         await this.fundWalletFromTreasury(accountPublicKey, additionalFunding);
         logger.info(
           `Added ${additionalFunding} XLM to ${accountPublicKey} for trustline reserve`
@@ -2791,82 +2799,165 @@ class StellarService {
       throw error;
     }
   }
+  async estimateNetworkFee(operationCount: number): Promise<number> {
+    try {
+      // Base fee is typically 100 stroops per operation
+      // 1 XLM = 10,000,000 stroops
+      const baseFeeStroops = 100;
+      const totalStroops = baseFeeStroops * operationCount;
 
+      // Add buffer for fee bump (typically 10x base fee for guaranteed inclusion)
+      const feeBumpMultiplier = 10;
+      const estimatedStroops = totalStroops * feeBumpMultiplier;
+
+      // Convert to XLM
+      const xlmFee = estimatedStroops / 10000000;
+
+      // Convert XLM to bNGN at approximate rate
+      // This is a placeholder calculation(to integrate exchange rate from an exchange)
+      const xlmToBngnRate = 483; // Example: 1 XLM = 1500 bNGN
+      const bngnFee = xlmFee * xlmToBngnRate;
+
+      // Round to 2 decimal places
+      return parseFloat(bngnFee.toFixed(2));
+    } catch (error) {
+      logger.error("Error estimating network fee:", error);
+      // Return a safe default fee in case of error
+      return 0.05; // Small default fee in bNGN
+    }
+  }
   /**
-   * Enhanced token purchase with trustline management
+   * Execute token purchase with fee distribution
+   * - Sends platform fee (3%) to platform primary account
+   * - Sends buy amount to distribution wallet
+   * - Sends property tokens to user wallet
+   * - Network fees paid by fee bump
    */
   async executeTokenPurchase(params: TokenPurchaseParams): Promise<string> {
     try {
       const {
         userWalletPublicKey,
         propertyWalletPublicKey,
+        platformWalletPublicKey,
         assetCode,
         assetIssuer,
-        amount,
-        paymentAmount,
+        tokenAmount,
+        buyAmount,
+        platformFee,
       } = params;
 
+      // Validate all required parameters
       if (
         !userWalletPublicKey ||
         !propertyWalletPublicKey ||
+        !platformWalletPublicKey ||
         !assetCode ||
-        !amount ||
-        !paymentAmount
+        !assetIssuer ||
+        !tokenAmount ||
+        !buyAmount ||
+        !platformFee
       ) {
         throw new Error("All parameters are required for token purchase");
       }
 
-      const asset = new Asset(assetCode, assetIssuer);
-      const ngnAsset = new Asset(
-        "NGN",
-        (await this.getPlatformKeypair("platform")).publicKey()
-      );
+      // Get issuer wallet to determine bNGN issuer
+      const issuerWallet = await MultiSigWallet.findOne({
+        where: { walletType: "platform_issuer", status: "active" },
+      });
 
-      // Ensure user has trustlines for both assets
+      if (!issuerWallet) {
+        throw new Error("Platform issuer wallet not found");
+      }
+
+      const propertyAsset = new Asset(assetCode, assetIssuer);
+      const bNGNAsset = new Asset("bNGN", issuerWallet.stellarPublicKey);
+
+      // Ensure user has trustline for property token
       await this.ensureTrustlines(userWalletPublicKey, [
         { assetCode, assetIssuer },
-        {
-          assetCode: "NGN",
-          assetIssuer: (await this.getPlatformKeypair("platform")).publicKey(),
-        },
       ]);
 
-      // Load property distribution wallet
-      const propertyAccount = await this.server.loadAccount(
-        propertyWalletPublicKey
+      // Ensure property wallet has trustline for bNGN
+      await this.ensureTrustlines(propertyWalletPublicKey, [
+        { assetCode: "bNGN", assetIssuer: issuerWallet.stellarPublicKey },
+      ]);
+
+      // Ensure platform wallet has trustline for bNGN
+      await this.ensureTrustlines(platformWalletPublicKey, [
+        { assetCode: "bNGN", assetIssuer: issuerWallet.stellarPublicKey },
+      ]);
+
+      // Get user wallet to retrieve user signer
+      const userWallet = await MultiSigWallet.findOne({
+        where: { stellarPublicKey: userWalletPublicKey, status: "active" },
+      });
+
+      if (!userWallet) {
+        throw new Error("User wallet not found");
+      }
+
+      // Get user's signer keypair
+      const userSignerKeypair = await secureWalletService.getKeypairFromStorage(
+        userWallet.id,
+        "user"
       );
 
-      const transaction = new TransactionBuilder(propertyAccount, {
+      // Load user account (source account for the transaction)
+      const userAccount = await this.server.loadAccount(userWalletPublicKey);
+
+      // Build transaction from user's account
+      const transaction = new TransactionBuilder(userAccount, {
         fee: BASE_FEE,
         networkPassphrase: this.network,
       })
+        // Operation 1: User sends platform fee (3%) to platform primary account
         .addOperation(
           Operation.payment({
-            destination: userWalletPublicKey,
-            asset: asset,
-            amount: amount,
+            destination: platformWalletPublicKey,
+            asset: bNGNAsset,
+            amount: platformFee,
           })
         )
+        // Operation 2: User sends buy amount to property distribution wallet
         .addOperation(
           Operation.payment({
             destination: propertyWalletPublicKey,
-            asset: ngnAsset,
-            amount: paymentAmount,
-            source: userWalletPublicKey,
+            asset: bNGNAsset,
+            amount: buyAmount,
+          })
+        )
+        // Operation 3: Property wallet sends property tokens to user
+        .addOperation(
+          Operation.payment({
+            destination: userWalletPublicKey,
+            asset: propertyAsset,
+            amount: tokenAmount,
+            source: propertyWalletPublicKey,
           })
         )
         .setTimeout(180)
         .build();
 
+      // Sign with user's key (for bNGN payments)
+      transaction.sign(userSignerKeypair);
+
+      // Sign with platform key (for property token payment from property wallet)
       transaction.sign(await this.getPlatformKeypair("platform"));
+
+      // Submit transaction with fee bump sponsorship
+      // Network fees are paid by the fee bump sponsor
       const result = await this.submitTransactionWithFeeBump(
         transaction,
-        await this.getPlatformKeypair("platform")
+        userSignerKeypair
       );
 
       logger.info(
-        `Token purchase executed: ${amount} ${assetCode} to ${userWalletPublicKey}`
+        `Token purchase executed: ${tokenAmount} ${assetCode} to ${userWalletPublicKey}, ` +
+          `${buyAmount} bNGN to ${propertyWalletPublicKey}, ` +
+          `${platformFee} bNGN fee to ${platformWalletPublicKey}, ` +
+          `Hash: ${result.hash}`
       );
+
       return result.hash;
     } catch (error) {
       logger.error("Error executing token purchase:", error);
@@ -3009,7 +3100,7 @@ class StellarService {
       );
       if (!hasReserves) {
         const additionalFunding = (
-          ENTRY_RESERVE *
+          STELLAR_RESERVES.ENTRY_RESERVE *
           neededTrustlines.length *
           1.1
         ).toFixed(7);
