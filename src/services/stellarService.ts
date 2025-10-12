@@ -3122,7 +3122,13 @@ class StellarService {
           "user"
         );
         signerKeypair = Keypair.fromSecret(userSecret);
-      } else if (wallet && wallet.walletType !== "user") {
+      } else if (wallet && wallet.walletType === "platform_primary") {
+        const platformSecret = await secureWalletService.retrieveWalletSecret(
+          wallet.id,
+          "platform_backup"
+        );
+        signerKeypair = Keypair.fromSecret(platformSecret);
+      } else if (wallet){
         // Try to get platform recovery signer first
         const recoverySigner = await MultiSigSigner.findOne({
           where: {
@@ -3131,7 +3137,6 @@ class StellarService {
             status: "active",
           },
         });
-
         if (recoverySigner) {
           signerKeypair = await this.getRecoveryKeypairForWallet(
             accountPublicKey

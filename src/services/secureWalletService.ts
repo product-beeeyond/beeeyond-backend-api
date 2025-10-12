@@ -11,6 +11,7 @@ class SecureWalletService {
   /**
    * Securely store a wallet secret with KMS encryption
    */
+  
   async storeWalletSecret(
     walletId: string,
     secretType: string,

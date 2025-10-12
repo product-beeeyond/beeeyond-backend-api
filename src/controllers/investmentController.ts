@@ -623,20 +623,6 @@ export const BuyPropertyToken = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: "Insufficient tokens available" });
     }
 
-    // Calculate costs
-    // const pricePerToken = property.tokenPrice;
-    // const totalAmount = quantity * pricePerToken;
-    // const platformFee = totalAmount * 0.025; // 2.5% platform fee
-    // const netAmount = totalAmount + platformFee;
-
-    // // Check minimum investment
-    // if (totalAmount < property.minimumInvestment) {
-    //   await dbTransaction.rollback();
-    //   return res.status(400).json({
-    //     error: `Minimum investment is ₦${property.minimumInvestment}`,
-    //   });
-    // }
-
     // Get user's multisig wallet
     const userWallet = await MultiSigWallet.findOne({
       where: { userId, walletType: "user", status: "active" },
@@ -728,12 +714,14 @@ export const BuyPropertyToken = async (req: AuthRequest, res: Response) => {
     // Update or create property holding
     const [holding] = await PropertyHolding.findOrCreate({
       where: { userId, propertyId },
-      // defaults: {
-      //   tokensOwned: 0,
-      //   totalInvested: 0,
-      //   currentValue: 0,
-      //   averagePrice: 0,
-      // },
+      defaults: {
+        userId,
+        propertyId,
+        tokensOwned: 0,
+        totalInvested: 0,
+        currentValue: 0,
+        averagePrice: 0,
+      },
       transaction: dbTransaction,
     });
 

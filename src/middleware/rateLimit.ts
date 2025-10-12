@@ -66,11 +66,11 @@ export const authLimiter = rateLimit({
 export const investmentLimiter = rateLimit({
   store: redisInvestmentStore,
   windowMs: 60 * 1000, // 1 minute
-  max: 10,
+  max: 3,
   standardHeaders: true,
   legacyHeaders: false,
   handler: createHandler(
-    "Too many investment requests. Please try again after 1 minutes."
+    "Too many investment requests. Please try again after 1 minute."
   ),
 keyGenerator: (req: any) => {
     // If user is authenticated, use their user ID

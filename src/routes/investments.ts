@@ -85,17 +85,16 @@ const validatePaginationParams = (req: any, res: any, next: any) => {
  * POST /api/investments/buy
  */
 router.post('/buy-fee', 
-  authenticate, 
   investmentLimiter,
+  authenticate, 
   requireKYC, 
   validateInvestmentTransaction,
   GetBuyFee
 );
 router.post('/buy', 
-  authenticate, 
   investmentLimiter,
+  authenticate, 
   requireKYC, 
-  validateInvestmentTransaction,
   BuyPropertyToken
 );
 
