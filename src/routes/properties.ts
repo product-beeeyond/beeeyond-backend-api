@@ -163,7 +163,7 @@ const validateSearchParams = (req: any, res: any, next: any) => {
  * GET /api/properties
  * Query params: page, limit, location, propertyType, status, featured, minPrice, maxPrice, sortBy, sortOrder
  */
-router.get("/", validatePaginationParams, GetAllProperties);
+router.post("/", validatePaginationParams, GetAllProperties);
 
 /**
  * Get single property details

@@ -11,7 +11,8 @@ import {
   GetTransactionHistory, 
   GetUserPortfolio, 
   // SellPropertyToken,
-  GetPendingTransactions
+  GetPendingTransactions,
+  GetBuyFee
 } from '../controllers/investmentController';
 import { Op } from 'sequelize';
 import MultiSigTransaction from '../models/MultiSigTransaction';
@@ -19,6 +20,7 @@ import MultiSigWallet from '../models/MultiSigWallet';
 import Property from '../models/Property';
 import PropertyHolding from '../models/PropertyHolding';
 import logger from '../utils/logger';
+import { investmentLimiter } from '../middleware/rateLimit';
 
 const router = Router();
 
@@ -27,7 +29,7 @@ const router = Router();
 // ===========================================
 
 const validateInvestmentTransaction = (req: any, res: any, next: any) => {
-  const { propertyId, quantity, paymentMethod } = req.body;
+  const { propertyId, quantity } = req.body;
   
   if (!propertyId || propertyId.trim().length === 0) {
     return res.status(400).json({ error: 'Property ID is required' });
@@ -37,11 +39,11 @@ const validateInvestmentTransaction = (req: any, res: any, next: any) => {
     return res.status(400).json({ error: 'Quantity must be a positive number' });
   }
   
-  if (!paymentMethod || !['wallet', 'stellar', 'bank_transfer'].includes(paymentMethod)) {
-    return res.status(400).json({ 
-      error: 'Payment method must be one of: wallet, stellar, bank_transfer' 
-    });
-  }
+  // if (!paymentMethod || !['wallet', 'stellar', 'bank_transfer'].includes(paymentMethod)) {
+  //   return res.status(400).json({ 
+  //     error: 'Payment method must be one of: wallet, stellar, bank_transfer' 
+  //   });
+  // }
   
   next();
 };
@@ -82,8 +84,16 @@ const validatePaginationParams = (req: any, res: any, next: any) => {
  * Buy property tokens
  * POST /api/investments/buy
  */
+router.post('/buy-fee', 
+  authenticate, 
+  investmentLimiter,
+  requireKYC, 
+  validateInvestmentTransaction,
+  GetBuyFee
+);
 router.post('/buy', 
   authenticate, 
+  investmentLimiter,
   requireKYC, 
   validateInvestmentTransaction,
   BuyPropertyToken

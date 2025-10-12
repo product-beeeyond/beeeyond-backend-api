@@ -267,7 +267,7 @@ export const GetAllProperties = async (req: AuthRequest, res: Response) => {
       maxPrice,
       sortBy = "createdAt",
       sortOrder = "DESC",
-    } = req.query;
+    } = req.body;
 
     const offset = (Number(page) - 1) * Number(limit);
     const whereClause: any = {};
@@ -293,7 +293,7 @@ export const GetAllProperties = async (req: AuthRequest, res: Response) => {
       include: [
         {
           model: MultiSigWallet,
-          as: "wallets",
+          as: "multiSigWallets",
           where: { status: "active" },
           required: false,
           attributes: ["stellarPublicKey", "walletType", "status"],
@@ -331,14 +331,13 @@ export const GetSingleProperty = async (req: AuthRequest, res: Response) => {
       include: [
         {
           model: MultiSigWallet,
-          as: "wallets",
+          as: "multiSigWallets",
           where: { status: "active" },
           required: false,
           attributes: [
             "stellarPublicKey",
             "walletType",
             "status",
-            "initialBalance",
           ],
         },
       ],
