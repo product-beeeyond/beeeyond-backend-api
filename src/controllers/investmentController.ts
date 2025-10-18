@@ -419,6 +419,10 @@ import { emailService } from "../services/emailService";
 import logger from "../utils/logger";
 import { redisClient } from "../config/redis";
 import { v4 as uuidv4 } from "uuid";
+import {
+  creatorPaymentSchema,
+  liquidatePropertySchema,
+} from "../middleware/validation";
 
 // Fee calculation constants
 const PLATFORM_FEE_PERCENTAGE = 0.03; // 3% platform fee
@@ -463,7 +467,7 @@ export const GetBuyFee = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    if (property.status !== "active") {
+    if (property.status !== "property_tokenised") {
       return res.status(400).json({
         success: false,
         error: "Property is not available for investment",
@@ -600,7 +604,7 @@ export const BuyPropertyToken = async (req: AuthRequest, res: Response) => {
       transaction: dbTransaction,
     });
 
-    if (!property || property.status !== "active") {
+    if (!property || property.status !== "property_tokenised") {
       await dbTransaction.rollback();
       return res.status(400).json({
         success: false,
@@ -617,10 +621,25 @@ export const BuyPropertyToken = async (req: AuthRequest, res: Response) => {
         .status(404)
         .json({ error: "Property not found or lacking asset code/issuer" });
     }
-
+    if (property.availableTokens < 1) {
+      await property.update(
+        { status: "token_sold_out", stage: 2 },
+        { transaction: dbTransaction }
+      );
+      await dbTransaction.commit();
+      logger.info(
+        `Property status updated. Status: token_sold_out  propertyId: ${property.id} updatedBy: ${userId}`
+      );
+      return res.status(400).json({
+        error: "Property tokens sold out already",
+      });
+    }
     if (quantity > property.availableTokens) {
       await dbTransaction.rollback();
-      return res.status(400).json({ error: "Insufficient tokens available" });
+      return res.status(400).json({
+        error:
+          "Insufficient tokens available, please check property's available tokens",
+      });
     }
 
     // Get user's multisig wallet
@@ -837,179 +856,739 @@ export const BuyPropertyToken = async (req: AuthRequest, res: Response) => {
   }
 };
 
-// export const SellPropertyToken = async (req: AuthRequest, res: Response) => {
-//   const dbTransaction = await sequelize.transaction();
+export const PayCreator = async (req: AuthRequest, res: Response) => {
+  const dbTransaction = await sequelize.transaction();
 
-//   try {
-//     const { propertyId, quantity } = req.body;
-//     const userId = req.user!.id;
+  try {
+    const { error } = creatorPaymentSchema.validate(req.body, {
+      abortEarly: false,
+      allowUnknown: false,
+    });
+    if (error) {
+      return res.status(400).json({
+        error: `Validation error`,
+        details: error,
+      });
+    }
+    const { propertyId, amount } = req.body;
+    const userId = req.user!.id;
 
-//     // Get property and holding details
-//     const [property, holding] = await Promise.all([
-//       Property.findByPk(propertyId, { transaction: dbTransaction }),
-//       PropertyHolding.findOne({
-//         where: { userId, propertyId },
-//         transaction: dbTransaction
-//       })
-//     ]);
+    // Validate inputs
+    if (!propertyId || !amount || amount <= 0) {
+      await dbTransaction.rollback();
+      return res.status(400).json({
+        success: false,
+        error: "Invalid property ID or amount",
+      });
+    }
 
-//     if (!property) {
-//       await dbTransaction.rollback();
-//       return res.status(404).json({ error: 'Property not found' });
-//     }
+    // Get property details
+    const property = await Property.findByPk(propertyId, {
+      transaction: dbTransaction,
+    });
 
-//     if (!holding || holding.tokensOwned < quantity) {
-//       await dbTransaction.rollback();
-//       return res.status(400).json({ error: 'Insufficient tokens to sell' });
-//     }
+    if (
+      !property ||
+      !property.stellarAssetCode ||
+      !property.stellarAssetIssuer
+    ) {
+      await dbTransaction.rollback();
+      return res.status(404).json({
+        success: false,
+        error: "Property not found or lacking asset details",
+      });
+    }
 
-//     // Get user's multisig wallet
-//     const userWallet = await MultiSigWallet.findOne({
-//       where: { userId, walletType: 'user_recovery', status: 'active' },
-//       transaction: dbTransaction
-//     });
+    if (property.status !== "token_sold_out") {
+      await dbTransaction.rollback();
+      return res.status(400).json({
+        success: false,
+        error: "Property tokens must be sold out before paying creator",
+      });
+    }
 
-//     if (!userWallet) {
-//       await dbTransaction.rollback();
-//       return res.status(400).json({ error: 'User wallet not found' });
-//     }
+    if (property.stage !== 2) {
+      await dbTransaction.rollback();
+      return res.status(400).json({
+        success: false,
+        error: "Property is not at the correct stage for creator payment",
+      });
+    }
 
-//     // Get property distribution wallet
-//     const propertyWallet = await MultiSigWallet.findOne({
-//       where: { propertyId, walletType: 'property_distribution', status: 'active' },
-//       transaction: dbTransaction
-//     });
+    // Calculate platform fee (3%)
+    const platformFee = amount * 0.03;
+    const creatorAmount = amount - platformFee;
 
-//     if (!propertyWallet) {
-//       await dbTransaction.rollback();
-//       return res.status(400).json({ error: 'Property distribution wallet not found' });
-//     }
+    // Get property distribution wallet
+    const propertyWallet = await MultiSigWallet.findOne({
+      where: {
+        propertyId,
+        walletType: "property_distribution",
+        status: "active",
+      },
+      transaction: dbTransaction,
+    });
 
-//     // Calculate proceeds
-//     const pricePerToken = property.tokenPrice;
-//     const totalAmount = quantity * pricePerToken;
-//     const platformFee = totalAmount * 0.025; // 2.5% platform fee
-//     const netAmount = totalAmount - platformFee;
+    if (!propertyWallet) {
+      await dbTransaction.rollback();
+      return res.status(400).json({
+        success: false,
+        error: "Property distribution wallet not found",
+      });
+    }
 
-//     // Create multisig transaction for the sale
-//     const multisigTransaction = await MultiSigTransaction.create({
-//       multiSigWalletId: userWallet.id,
-//       transactionXDR: '', // Will be populated by stellar service
-//       description: `Sell ${quantity} tokens of ${property.title}`,
-//       category: 'fund_management',
-//       requiredSignatures: 1,
-//       status: 'pending',
-//       proposedBy: userId,
-//       metadata: {
-//         transactionType: 'sell',
-//         propertyId,
-//         quantity,
-//         pricePerToken,
-//         totalAmount,
-//         platformFee,
-//         netAmount,
-//         sessionId: req.headers['x-session-id'] as string,
-//         ipAddress: req.ip,
-//       },
-//       expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
-//     }, { transaction: dbTransaction });
+    // Get creator wallet
+    const creatorWallet = await MultiSigWallet.findOne({
+      where: {
+        userId: property.creatorId,
+        walletType: "user",
+        status: "active",
+      },
+      transaction: dbTransaction,
+    });
 
-//     // Execute the sale on Stellar network
-//     try {
-//       const stellarTxHash = await stellarService.executeTokenSale({
-//         userWalletPublicKey: userWallet.stellarPublicKey,
-//         propertyWalletPublicKey: propertyWallet.stellarPublicKey,
-//         assetCode: property.stellarAssetCode || `PROP${propertyId.substring(0, 8).toUpperCase()}`,
-//         assetIssuer: property.stellarAssetIssuer || propertyWallet.stellarPublicKey,
-//         amount: quantity.toString(),
-//         proceedsAmount: netAmount.toString(),
-//       });
+    if (!creatorWallet) {
+      await dbTransaction.rollback();
+      return res.status(400).json({
+        success: false,
+        error: "Creator wallet not found",
+      });
+    }
 
-//       // Update multisig transaction
-//       await multisigTransaction.update({
-//         status: 'executed',
-//         executedBy: userId,
-//         executedAt: new Date(),
-//         executionTxHash: stellarTxHash,
-//       }, { transaction: dbTransaction });
+    // Get platform primary wallet
+    const platformWallet = await MultiSigWallet.findOne({
+      where: { walletType: "platform_primary", status: "active" },
+      transaction: dbTransaction,
+    });
 
-//     } catch (stellarError) {
-//       await multisigTransaction.update({
-//         status: 'failed',
-//         failureReason: stellarError instanceof Error ? stellarError.message : 'Unknown Stellar error',
-//       }, { transaction: dbTransaction });
+    if (!platformWallet) {
+      await dbTransaction.rollback();
+      return res.status(400).json({
+        success: false,
+        error: "Platform wallet not found",
+      });
+    }
 
-//       await dbTransaction.rollback();
-//       return res.status(500).json({
-//         error: 'Sale processing failed',
-//         details: stellarError instanceof Error ? stellarError.message : 'Unknown error'
-//       });
-//     }
+    // Check property wallet has sufficient bNGN
+    const issuerWallet = await MultiSigWallet.findOne({
+      where: { walletType: "platform_issuer", status: "active" },
+      transaction: dbTransaction,
+    });
 
-//     // Update property available tokens
-//     await property.update({
-//       availableTokens: property.availableTokens + quantity,
-//     }, { transaction: dbTransaction });
+    if (!issuerWallet) {
+      await dbTransaction.rollback();
+      return res.status(400).json({
+        success: false,
+        error: "Platform issuer wallet not found",
+      });
+    }
 
-//     // Update holding
-//     const newTokensOwned = holding.tokensOwned - quantity;
-//     const proportionalInvestment = (quantity / holding.tokensOwned) * holding.totalInvested;
-//     const newTotalInvested = holding.totalInvested - proportionalInvestment;
+    const walletBalances = await stellarService.getAccountBalance(
+      propertyWallet.stellarPublicKey
+    );
+    const bNGNBalance = walletBalances.find(
+      (b) =>
+        b.asset_code === "bNGN" &&
+        b.asset_issuer === issuerWallet.stellarPublicKey
+    );
 
-//     if (newTokensOwned > 0) {
-//       await holding.update({
-//         tokensOwned: newTokensOwned,
-//         totalInvested: newTotalInvested,
-//         currentValue: newTokensOwned * pricePerToken,
-//         averagePrice: newTotalInvested / newTokensOwned,
-//       }, { transaction: dbTransaction });
-//     } else {
-//       // Remove holding if no tokens left
-//       await holding.destroy({ transaction: dbTransaction });
-//     }
+    if (!bNGNBalance || parseFloat(bNGNBalance.balance) < amount) {
+      await dbTransaction.rollback();
+      return res.status(400).json({
+        success: false,
+        error: "Insufficient bNGN in distribution wallet",
+      });
+    }
 
-//     await dbTransaction.commit();
+    // Create multisig transaction
+    const multisigTransaction = await MultiSigTransaction.create(
+      {
+        multiSigWalletId: propertyWallet.id,
+        transactionXDR: "",
+        description: `Pay creator ${creatorAmount} bNGN for ${property.title}`,
+        category: "fund_management",
+        requiredSignatures: 1,
+        status: "pending",
+        proposedBy: userId,
+        metadata: {
+          transactionType: "creator_payment",
+          propertyId,
+          amount,
+          creatorAmount,
+          platformFee,
+          creatorId: property.creatorId,
+        },
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      },
+      { transaction: dbTransaction }
+    );
 
-//     // Send notifications
-//     try {
-//       await emailService.sendTransactionConfirmation(req.user!.email, req.user!.firstName || 'User', {
-//         type: 'Sale',
-//         propertyTitle: property.title,
-//         quantity,
-//         amount: netAmount,
-//       });
+    try {
+      const stellarTxHash = await stellarService.executeCreatorPayment({
+        propertyWalletPublicKey: propertyWallet.stellarPublicKey,
+        creatorWalletPublicKey: creatorWallet.stellarPublicKey,
+        platformWalletPublicKey: platformWallet.stellarPublicKey,
+        creatorAmount: creatorAmount.toString(),
+        platformFee: platformFee.toString(),
+      });
 
-//       // if (req.user!.phone) {
-//       //   await smsService.sendTransactionAlert(req.user!.phone, {
-//       //     type: 'sale',
-//       //     quantity,
-//       //     amount: netAmount,
-//       //   });
-//       // }
-//     } catch (notificationError) {
-//       logger.error('Failed to send notifications:', notificationError);
-//     }
+      // Update multisig transaction
+      await multisigTransaction.update(
+        {
+          status: "executed",
+          executedBy: userId,
+          executedAt: new Date(),
+          executionTxHash: stellarTxHash,
+        },
+        { transaction: dbTransaction }
+      );
 
-//     res.json({
-//       message: 'Sale successful',
-//       transaction: {
-//         id: multisigTransaction.id,
-//         multisigTransactionId: multisigTransaction.id,
-//         stellarTxHash: multisigTransaction.executionTxHash,
-//         quantity,
-//         totalAmount,
-//         platformFee,
-//         netAmount,
-//         status: 'executed',
-//       },
-//     });
+      // Update property stage to creator_paid
+      await property.update({ stage: 3 }, { transaction: dbTransaction });
 
-//   } catch (error) {
-//     await dbTransaction.rollback();
-//     logger.error('Investment sale error:', error);
-//     res.status(500).json({ error: 'Investment sale failed' });
-//   }
-// };
+      await dbTransaction.commit();
+
+      logger.info(
+        `Creator payment executed: ${creatorAmount} bNGN to creator, ${platformFee} bNGN platform fee. Property: ${propertyId}, Stage updated to: 3`
+      );
+
+      res.status(200).json({
+        success: true,
+        message: "Creator payment successful",
+        transaction: {
+          id: multisigTransaction.id,
+          stellarTxHash: multisigTransaction.executionTxHash,
+          totalAmount: amount,
+          creatorAmount,
+          platformFee,
+          status: "executed",
+        },
+        property: {
+          id: property.id,
+          title: property.title,
+          stage: 3,
+        },
+      });
+    } catch (stellarError) {
+      await multisigTransaction.update(
+        {
+          status: "failed",
+          failureReason:
+            stellarError instanceof Error
+              ? stellarError.message
+              : "Unknown Stellar error",
+        },
+        { transaction: dbTransaction }
+      );
+
+      await dbTransaction.rollback();
+      logger.error("Creator payment Stellar error:", stellarError);
+      return res.status(500).json({
+        success: false,
+        error: "Payment processing failed",
+        details:
+          stellarError instanceof Error
+            ? stellarError.message
+            : "Unknown error",
+      });
+    }
+  } catch (error) {
+    await dbTransaction.rollback();
+    logger.error("Creator payment error:", error);
+    res.status(500).json({
+      success: false,
+      error: "Creator payment failed",
+    });
+  }
+};
+
+export const LiquidateProperty = async (req: AuthRequest, res: Response) => {
+  const dbTransaction = await sequelize.transaction();
+
+  try {
+    const { error } = liquidatePropertySchema.validate(req.body, {
+      abortEarly: false,
+      allowUnknown: false,
+    });
+    if (error) {
+      return res.status(400).json({
+        error: `Validation error`,
+        details: error,
+      });
+    }
+    const { propertyId, saleAmount } = req.body;
+    const userId = req.user!.id;
+
+    // Validate inputs
+    if (!propertyId || !saleAmount || saleAmount <= 0) {
+      await dbTransaction.rollback();
+      return res.status(400).json({
+        success: false,
+        error: "Invalid property ID or sale amount",
+      });
+    }
+
+    // Get property details
+    const property = await Property.findByPk(propertyId, {
+      transaction: dbTransaction,
+    });
+
+    if (
+      !property ||
+      !property.stellarAssetCode ||
+      !property.stellarAssetIssuer
+    ) {
+      await dbTransaction.rollback();
+      return res.status(404).json({
+        success: false,
+        error: "Property not found or lacking asset details",
+      });
+    }
+
+    if (!property.propertyManagerPublicKey) {
+      await dbTransaction.rollback();
+      return res.status(400).json({
+        success: false,
+        error: "Property does not have a designated property manager",
+      });
+    }
+
+    if (property.status !== "token_sold_out") {
+      await dbTransaction.rollback();
+      return res.status(400).json({
+        success: false,
+        error: "Property must be in token_sold_out status to liquidate",
+      });
+    }
+
+    if (property.stage !== 3) {
+      await dbTransaction.rollback();
+      return res.status(400).json({
+        success: false,
+        error:
+          "Property is not at the correct stage for liquidation (must be stage 3: creator_paid)",
+      });
+    }
+
+    // Get property distribution wallet
+    const propertyWallet = await MultiSigWallet.findOne({
+      where: {
+        propertyId,
+        walletType: "property_distribution",
+        status: "active",
+      },
+      transaction: dbTransaction,
+    });
+
+    if (!propertyWallet) {
+      await dbTransaction.rollback();
+      return res.status(400).json({
+        success: false,
+        error: "Property distribution wallet not found",
+      });
+    }
+
+    // Get property manager's wallet
+    const managerWallet = await MultiSigWallet.findOne({
+      where: {
+        userId,
+        walletType: "user",
+        status: "active",
+      },
+      transaction: dbTransaction,
+    });
+
+    if (!managerWallet) {
+      await dbTransaction.rollback();
+      return res.status(400).json({
+        success: false,
+        error: "Property manager wallet not found",
+      });
+    }
+
+    // Verify the requesting user is the designated property manager
+    if (managerWallet.stellarPublicKey !== property.propertyManagerPublicKey) {
+      await dbTransaction.rollback();
+      return res.status(403).json({
+        success: false,
+        error:
+          "Only the designated property manager can liquidate this property",
+      });
+    }
+
+    const issuerWallet = await MultiSigWallet.findOne({
+      where: { walletType: "platform_issuer", status: "active" },
+      transaction: dbTransaction,
+    });
+
+    if (!issuerWallet) {
+      await dbTransaction.rollback();
+      return res.status(400).json({
+        success: false,
+        error: "Platform issuer wallet not found",
+      });
+    }
+    // Check property manager wallet has sufficient bNGN
+    const walletBalances = await stellarService.getAccountBalance(
+      managerWallet.stellarPublicKey
+    );
+    const bNGNBalance = walletBalances.find(
+      (b) =>
+        b.asset_code === "bNGN" &&
+        b.asset_issuer === issuerWallet.stellarPublicKey
+    );
+
+    if (!bNGNBalance || parseFloat(bNGNBalance.balance) < saleAmount) {
+      await dbTransaction.rollback();
+      return res.status(400).json({
+        success: false,
+        error: "Insufficient bNGN in buyer wallet",
+      });
+    }
+
+    // Calculate new price per token
+    const newPricePerToken = saleAmount / property.totalTokens;
+
+    // Create multisig transaction
+    const multisigTransaction = await MultiSigTransaction.create(
+      {
+        multiSigWalletId: managerWallet.id,
+        transactionXDR: "",
+        description: `Liquidate property ${property.title} - ${saleAmount} bNGN payment`,
+        category: "fund_management",
+        requiredSignatures: 1,
+        status: "pending",
+        proposedBy: userId,
+        metadata: {
+          transactionType: "property_liquidation",
+          propertyId,
+          saleAmount,
+          oldPricePerToken: property.tokenPrice,
+          newPricePerToken,
+        },
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      },
+      { transaction: dbTransaction }
+    );
+
+    try {
+      const stellarTxHash = await stellarService.executePropertyLiquidation({
+        managerWallet,
+        propertyWalletPublicKey: propertyWallet.stellarPublicKey,
+        saleAmount: saleAmount.toString(),
+      });
+
+      // Update multisig transaction
+      await multisigTransaction.update(
+        {
+          status: "executed",
+          executedBy: userId,
+          executedAt: new Date(),
+          executionTxHash: stellarTxHash,
+        },
+        { transaction: dbTransaction }
+      );
+
+      // Update property status, stage, and price per token
+      await property.update(
+        {
+          status: "property_liquidated",
+          stage: 4,
+          tokenPrice: newPricePerToken,
+        },
+        { transaction: dbTransaction }
+      );
+
+      // Update all property holdings with new current value based on new price
+      await PropertyHolding.update(
+        {
+          currentValue: sequelize.literal(
+            `"tokensOwned" * ${newPricePerToken}`
+          ),
+        },
+        {
+          where: { propertyId },
+          transaction: dbTransaction,
+        }
+      );
+
+      await dbTransaction.commit();
+
+      logger.info(
+        `Property liquidation executed: ${saleAmount} bNGN paid. Property: ${propertyId}, Status: property_liquidated, Stage: 4, New price per token: ${newPricePerToken}`
+      );
+
+      res.status(200).json({
+        success: true,
+        message: "Property liquidation successful",
+        transaction: {
+          id: multisigTransaction.id,
+          stellarTxHash: multisigTransaction.executionTxHash,
+          saleAmount,
+          status: "executed",
+        },
+        property: {
+          id: property.id,
+          title: property.title,
+          status: "property_liquidated",
+          stage: 4,
+          oldPricePerToken: property.tokenPrice,
+          newPricePerToken,
+        },
+      });
+    } catch (stellarError) {
+      await multisigTransaction.update(
+        {
+          status: "failed",
+          failureReason:
+            stellarError instanceof Error
+              ? stellarError.message
+              : "Unknown Stellar error",
+        },
+        { transaction: dbTransaction }
+      );
+
+      await dbTransaction.rollback();
+      logger.error("Property liquidation Stellar error:", stellarError);
+      return res.status(500).json({
+        success: false,
+        error: "Liquidation processing failed",
+        details:
+          stellarError instanceof Error
+            ? stellarError.message
+            : "Unknown error",
+      });
+    }
+  } catch (error) {
+    await dbTransaction.rollback();
+    logger.error("Property liquidation error:", error);
+    res.status(500).json({
+      success: false,
+      error: "Property liquidation failed",
+    });
+  }
+};
+export const SellPropertyToken = async (req: AuthRequest, res: Response) => {
+  const dbTransaction = await sequelize.transaction();
+
+  try {
+    const { propertyId, quantity } = req.body;
+    const userId = req.user!.id;
+
+    // Get property and holding details
+    const [property, holding] = await Promise.all([
+      Property.findByPk(propertyId, { transaction: dbTransaction }),
+      PropertyHolding.findOne({
+        where: { userId, propertyId },
+        transaction: dbTransaction,
+      }),
+    ]);
+
+    if (!property || !property.stellarAssetCode || !property.stellarAssetIssuer) {
+      await dbTransaction.rollback();
+      return res.status(404).json({ error: "Property not found or missing asset details" });
+    }
+
+// Property must be liquidated before redemption
+    if (property.status !== "property_liquidated") {
+      await dbTransaction.rollback();
+      return res.status(400).json({ 
+        success: false,
+        error: "Property must be liquidated before tokens can be redeemed" 
+      });
+    }
+
+ if (property.stage !== 4) {
+      await dbTransaction.rollback();
+      return res.status(400).json({ 
+        success: false,
+        error: "Property tokens cannot be redeemed yet as property has not been liquidated" 
+      });
+    }
+
+
+    if (!holding || holding.tokensOwned < quantity) {
+      await dbTransaction.rollback();
+      return res.status(400).json({ error: "Insufficient tokens to sell" });
+    }
+
+    // Get user's multisig wallet
+    const userWallet = await MultiSigWallet.findOne({
+      where: { userId, walletType: "user", status: "active" },
+      transaction: dbTransaction,
+    });
+
+    if (!userWallet) {
+      await dbTransaction.rollback();
+      return res.status(400).json({ error: "User wallet not found" });
+    }
+
+    // Get property distribution wallet
+    const propertyWallet = await MultiSigWallet.findOne({
+      where: {
+        propertyId,
+        walletType: "property_distribution",
+        status: "active",
+      },
+      transaction: dbTransaction,
+    });
+
+    if (!propertyWallet) {
+      await dbTransaction.rollback();
+      return res
+        .status(400)
+        .json({ error: "Property distribution wallet not found" });
+    }
+
+    // Calculate proceeds
+    const pricePerToken = property.tokenPrice;
+    const totalAmount = quantity * pricePerToken;
+    const platformFee = totalAmount * 0.025; // 2.5% platform fee
+    const netAmount = totalAmount - platformFee;
+
+    // Create multisig transaction for the sale
+    const multisigTransaction = await MultiSigTransaction.create(
+      {
+        multiSigWalletId: userWallet.id,
+        transactionXDR: "", // Will be populated by stellar service
+        description: `Sell ${quantity} tokens of ${property.title}`,
+        category: "fund_management",
+        requiredSignatures: 1,
+        status: "pending",
+        proposedBy: userId,
+        metadata: {
+          transactionType: "sell",
+          propertyId,
+          quantity,
+          pricePerToken,
+          totalAmount,
+          platformFee,
+          netAmount,
+          sessionId: req.headers["x-session-id"] as string,
+          ipAddress: req.ip,
+        },
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      },
+      { transaction: dbTransaction }
+    );
+
+    // Execute the sale on Stellar network
+    try {
+      const stellarTxHash = await stellarService.executeTokenSale({
+        userWalletPublicKey: userWallet.stellarPublicKey,
+        propertyWalletPublicKey: propertyWallet.stellarPublicKey,
+        assetCode: property.stellarAssetCode,
+        assetIssuer: property.stellarAssetIssuer,
+        amount: quantity.toString(),
+        proceedsAmount: netAmount.toString(),
+      });
+
+      // Update multisig transaction
+      await multisigTransaction.update(
+        {
+          status: "executed",
+          executedBy: userId,
+          executedAt: new Date(),
+          executionTxHash: stellarTxHash,
+        },
+        { transaction: dbTransaction }
+      );
+    } catch (stellarError) {
+      await multisigTransaction.update(
+        {
+          status: "failed",
+          failureReason:
+            stellarError instanceof Error
+              ? stellarError.message
+              : "Unknown Stellar error",
+        },
+        { transaction: dbTransaction }
+      );
+
+      await dbTransaction.rollback();
+      return res.status(500).json({
+        error: "Sale processing failed",
+        details:
+          stellarError instanceof Error
+            ? stellarError.message
+            : "Unknown error",
+      });
+    }
+
+    // Update property available tokens
+    await property.update(
+      {
+        availableTokens: property.availableTokens + quantity,
+      },
+      { transaction: dbTransaction }
+    );
+
+    // Update holding
+    const newTokensOwned = holding.tokensOwned - quantity;
+    const proportionalInvestment =
+      (quantity / holding.tokensOwned) * holding.totalInvested;
+    const newTotalInvested = holding.totalInvested - proportionalInvestment;
+
+    if (newTokensOwned > 0) {
+      await holding.update(
+        {
+          tokensOwned: newTokensOwned,
+          totalInvested: newTotalInvested,
+          currentValue: newTokensOwned * pricePerToken,
+          averagePrice: newTotalInvested / newTokensOwned,
+        },
+        { transaction: dbTransaction }
+      );
+    } else {
+      // Remove holding if no tokens left
+      await holding.destroy({ transaction: dbTransaction });
+    }
+
+    await dbTransaction.commit();
+
+    // Send notifications
+    try {
+      await emailService.sendTransactionConfirmation(
+        req.user!.email,
+        req.user!.firstName || "User",
+        {
+          type: "Sale",
+          propertyTitle: property.title,
+          quantity,
+          amount: netAmount,
+        }
+      );
+
+      // if (req.user!.phone) {
+      //   await smsService.sendTransactionAlert(req.user!.phone, {
+      //     type: 'sale',
+      //     quantity,
+      //     amount: netAmount,
+      //   });
+      // }
+    } catch (notificationError) {
+      logger.error("Failed to send sell notification:", notificationError);
+    }
+
+    res.json({
+      message: "Sale successful",
+      transaction: {
+        id: multisigTransaction.id,
+        multisigTransactionId: multisigTransaction.id,
+        stellarTxHash: multisigTransaction.executionTxHash,
+        quantity,
+        totalAmount,
+        platformFee,
+        netAmount,
+        status: "executed",
+      },
+    });
+  } catch (error) {
+    await dbTransaction.rollback();
+    logger.error("Investment sale error:", error);
+    res.status(500).json({ error: "Investment sale failed" });
+  }
+};
 
 export const GetUserPortfolio = async (req: AuthRequest, res: Response) => {
   try {

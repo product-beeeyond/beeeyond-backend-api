@@ -102,7 +102,7 @@ export const strictLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   handler: createHandler(
-    "Too many requests for this sensitive operation. Please try again after 15 minutes."
+    "Too many requests for this operation. Please try again after 15 minutes."
   ),
   keyGenerator: (req: any) => {
     if (req.user && req.user.id) {

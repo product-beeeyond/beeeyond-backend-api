@@ -7,9 +7,7 @@ import {
   requireKYC,
   requireSuperAdmin,
 } from "../middleware/auth";
-import {
-  validatePropertyUpdate,
-} from "../middleware/validation";
+import { validatePropertyUpdate } from "../middleware/validation";
 import {
   // New comprehensive methods
   CreateProperty,
@@ -186,7 +184,7 @@ router.post("/search", validateSearchParams, async (req, res) => {
       limit = 20,
     } = req.body;
 
-    const searchConditions: any = { status: "active" };
+    const searchConditions: any = { status: "property_tokenised" };
     const offset = (Number(page) - 1) * Number(limit);
 
     // Text search
@@ -368,12 +366,7 @@ router.get(
  * POST /api/properties
  * Requires: Admin access
  */
-router.post(
-  "/create-property",
-  authenticate,
-  requireAdmin,
-  CreateProperty
-);
+router.post("/create-property", authenticate, requireAdmin, CreateProperty);
 
 /**
  * Update existing property (Admin only)
@@ -477,7 +470,8 @@ router.post(
         totalValue: totalTokens * tokenPrice,
         stellarAssetCode: assetCode,
         stellarAssetIssuer: distributionWallet.stellarPublicKey,
-        status: "active",
+        status: "property_tokenised",
+        stage: 1
       });
 
       logger.info(

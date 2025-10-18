@@ -3,24 +3,26 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { Router } from 'express';
-import { authenticate, requireKYC } from '../middleware/auth';
-import { validate } from '../middleware/validation';
-import { 
-  BuyPropertyToken, 
-  GetTransactionHistory, 
-  GetUserPortfolio, 
-  // SellPropertyToken,
+import { Router } from "express";
+import { authenticate, requireAdmin, requireKYC } from "../middleware/auth";
+import { validate, validateSaleTransaction } from "../middleware/validation";
+import {
+  BuyPropertyToken,
+  GetTransactionHistory,
+  GetUserPortfolio,
+  SellPropertyToken,
   GetPendingTransactions,
-  GetBuyFee
-} from '../controllers/investmentController';
-import { Op } from 'sequelize';
-import MultiSigTransaction from '../models/MultiSigTransaction';
-import MultiSigWallet from '../models/MultiSigWallet';
-import Property from '../models/Property';
-import PropertyHolding from '../models/PropertyHolding';
-import logger from '../utils/logger';
-import { investmentLimiter } from '../middleware/rateLimit';
+  GetBuyFee,
+  PayCreator,
+  LiquidateProperty,
+} from "../controllers/investmentController";
+import { Op } from "sequelize";
+import MultiSigTransaction from "../models/MultiSigTransaction";
+import MultiSigWallet from "../models/MultiSigWallet";
+import Property from "../models/Property";
+import PropertyHolding from "../models/PropertyHolding";
+import logger from "../utils/logger";
+import { investmentLimiter, strictLimiter } from "../middleware/rateLimit";
 
 const router = Router();
 
@@ -30,49 +32,42 @@ const router = Router();
 
 const validateInvestmentTransaction = (req: any, res: any, next: any) => {
   const { propertyId, quantity } = req.body;
-  
+
   if (!propertyId || propertyId.trim().length === 0) {
-    return res.status(400).json({ error: 'Property ID is required' });
+    return res.status(400).json({ error: "Property ID is required" });
   }
-  
+
   if (!quantity || isNaN(Number(quantity)) || Number(quantity) <= 0) {
-    return res.status(400).json({ error: 'Quantity must be a positive number' });
+    return res
+      .status(400)
+      .json({ error: "Quantity must be a positive number" });
   }
-  
+
   // if (!paymentMethod || !['wallet', 'stellar', 'bank_transfer'].includes(paymentMethod)) {
-  //   return res.status(400).json({ 
-  //     error: 'Payment method must be one of: wallet, stellar, bank_transfer' 
+  //   return res.status(400).json({
+  //     error: 'Payment method must be one of: wallet, stellar, bank_transfer'
   //   });
   // }
-  
+
   next();
 };
 
-const validateSaleTransaction = (req: any, res: any, next: any) => {
-  const { propertyId, quantity } = req.body;
-  
-  if (!propertyId || propertyId.trim().length === 0) {
-    return res.status(400).json({ error: 'Property ID is required' });
-  }
-  
-  if (!quantity || isNaN(Number(quantity)) || Number(quantity) <= 0) {
-    return res.status(400).json({ error: 'Quantity must be a positive number' });
-  }
-  
-  next();
-};
+
 
 const validatePaginationParams = (req: any, res: any, next: any) => {
   const { page, limit } = req.query;
-  
+
   if (page && (isNaN(Number(page)) || Number(page) < 1)) {
-    return res.status(400).json({ error: 'Page must be a positive number' });
+    return res.status(400).json({ error: "Page must be a positive number" });
   }
-  
-  if (limit && (isNaN(Number(limit)) || Number(limit) < 1 || Number(limit) > 100)) {
-    return res.status(400).json({ error: 'Limit must be between 1 and 100' });
+
+  if (
+    limit &&
+    (isNaN(Number(limit)) || Number(limit) < 1 || Number(limit) > 100)
+  ) {
+    return res.status(400).json({ error: "Limit must be between 1 and 100" });
   }
-  
+
   next();
 };
 
@@ -84,45 +79,70 @@ const validatePaginationParams = (req: any, res: any, next: any) => {
  * Buy property tokens
  * POST /api/investments/buy
  */
-router.post('/buy-fee', 
+router.post(
+  "/buy-fee",
   investmentLimiter,
-  authenticate, 
-  requireKYC, 
+  authenticate,
+  requireKYC,
   validateInvestmentTransaction,
   GetBuyFee
 );
-router.post('/buy', 
+router.post(
+  "/buy",
   investmentLimiter,
-  authenticate, 
-  requireKYC, 
+  authenticate,
+  requireKYC,
   BuyPropertyToken
 );
 
 /**
+ * Pay creator for sold-out property
+ * POST /api/investments/pay-creator
+ * Admin only
+ */
+router.post(
+  "/pay-creator",
+  authenticate,
+  requireAdmin,
+  investmentLimiter,
+  PayCreator
+);
+
+/**
+ * Liquidate property
+ * POST /api/investments/liquidate
+ * Admin only
+ */
+router.post(
+  "/liquidate",
+  authenticate,
+  requireKYC,
+  investmentLimiter,
+  LiquidateProperty
+);
+/**
  * Sell property tokens
  * POST /api/investments/sell
  */
-// router.post('/sell', 
-//   authenticate, 
-//   requireKYC,
-//   validateSaleTransaction,
-//   SellPropertyToken
-// );
+router.post('/sell',
+  authenticate,
+  requireKYC,
+  validateSaleTransaction,
+  SellPropertyToken
+);
 
 /**
  * Get user's investment portfolio
  * GET /api/investments/portfolio
  */
-router.get('/portfolio', 
-  authenticate, 
-  GetUserPortfolio
-);
+router.get("/portfolio", authenticate, GetUserPortfolio);
 
 /**
  * Get user's transaction history
  * GET /api/investments/transactions
  */
-router.get('/transactions', 
+router.get(
+  "/transactions",
   authenticate,
   validatePaginationParams,
   GetTransactionHistory
@@ -132,10 +152,7 @@ router.get('/transactions',
  * Get pending multisig transactions
  * GET /api/investments/transactions/pending
  */
-router.get('/transactions/pending',
-  authenticate,
-  GetPendingTransactions
-);
+router.get("/transactions/pending", authenticate, GetPendingTransactions);
 
 // ===========================================
 // PORTFOLIO ANALYTICS ROUTES
@@ -241,7 +258,7 @@ router.get('/transactions/pending',
 //       const assetAllocation = holdings.reduce((acc, holding) => {
 //         const propertyType = holding.property?.propertyType || 'Unknown';
 //         const location = holding.property?.location || 'Unknown';
-        
+
 //         if (!acc.byType[propertyType]) {
 //           acc.byType[propertyType] = { value: 0, percentage: 0, count: 0 };
 //         }
@@ -264,12 +281,12 @@ router.get('/transactions/pending',
 
 //       // Calculate percentages
 //       Object.keys(assetAllocation.byType).forEach(type => {
-//         assetAllocation.byType[type].percentage = 
+//         assetAllocation.byType[type].percentage =
 //           (assetAllocation.byType[type].value / assetAllocation.totalValue) * 100;
 //       });
 
 //       Object.keys(assetAllocation.byLocation).forEach(location => {
-//         assetAllocation.byLocation[location].percentage = 
+//         assetAllocation.byLocation[location].percentage =
 //           (assetAllocation.byLocation[location].value / assetAllocation.totalValue) * 100;
 //       });
 
@@ -277,14 +294,14 @@ router.get('/transactions/pending',
 //       const riskMetrics = holdings.map(holding => {
 //         const property = holding.property;
 //         const concentration = (holding.currentValue / assetAllocation.totalValue) * 100;
-        
+
 //         return {
 //           propertyId: property?.id,
 //           propertyTitle: property?.title,
 //           concentration,
 //           allocation: holding.currentValue,
 //           performance: holding.currentValue - holding.totalInvested,
-//           performancePercentage: holding.totalInvested > 0 ? 
+//           performancePercentage: holding.totalInvested > 0 ?
 //             ((holding.currentValue - holding.totalInvested) / holding.totalInvested) * 100 : 0
 //         };
 //       });
@@ -297,7 +314,7 @@ router.get('/transactions/pending',
 //           totalInvested: holdings.reduce((sum, h) => sum + h.totalInvested, 0),
 //           totalReturn: assetAllocation.totalValue - holdings.reduce((sum, h) => sum + h.totalInvested, 0),
 //           returnPercentage: holdings.reduce((sum, h) => sum + h.totalInvested, 0) > 0 ?
-//             ((assetAllocation.totalValue - holdings.reduce((sum, h) => sum + h.totalInvested, 0)) / 
+//             ((assetAllocation.totalValue - holdings.reduce((sum, h) => sum + h.totalInvested, 0)) /
 //              holdings.reduce((sum, h) => sum + h.totalInvested, 0)) * 100 : 0,
 //           propertyCount: holdings.length,
 //           totalTokens: holdings.reduce((sum, h) => sum + h.tokensOwned, 0)
@@ -305,7 +322,7 @@ router.get('/transactions/pending',
 //         assetAllocation,
 //         riskAnalysis: {
 //           maxConcentration: Math.max(...riskMetrics.map(r => r.concentration), 0),
-//           diversificationScore: holdings.length > 1 ? 
+//           diversificationScore: holdings.length > 1 ?
 //             100 - Math.max(...riskMetrics.map(r => r.concentration), 0) : 0,
 //           topHoldings: riskMetrics.sort((a, b) => b.concentration - a.concentration).slice(0, 5),
 //           riskLevel: (() => {
@@ -364,7 +381,7 @@ router.get('/transactions/pending',
 //       const userMetrics = holdings.reduce((acc, holding) => {
 //         acc.totalInvested += holding.totalInvested;
 //         acc.currentValue += holding.currentValue;
-//         acc.expectedReturn += (holding.property?.expectedAnnualReturn || 0) * 
+//         acc.expectedReturn += (holding.property?.expectedAnnualReturn || 0) *
 //           (holding.currentValue / holdings.reduce((sum, h) => sum + h.currentValue, 0));
 //         return acc;
 //       }, {
@@ -433,22 +450,22 @@ router.get('/transactions/pending',
 //           })(),
 //           recommendations: (() => {
 //             const recommendations = [];
-            
+
 //             if (holdings.length < 3) {
 //               recommendations.push('Consider diversifying across more properties');
 //             }
-            
+
 //             if (userReturn < 5) {
 //               recommendations.push('Review property selection criteria');
 //             }
-            
+
 //             const maxHolding = Math.max(...holdings.map(h => h.currentValue));
 //             const concentration = (maxHolding / portfolioValue) * 100;
-            
+
 //             if (concentration > 40) {
 //               recommendations.push('Consider reducing concentration in top holding');
 //             }
-            
+
 //             return recommendations;
 //           })()
 //         }
@@ -556,18 +573,18 @@ router.get('/transactions/pending',
 //         risks: {
 //           liquidityRisk: 'Medium - Property tokens may have limited secondary market',
 //           marketRisk: 'Property values can fluctuate based on real estate market conditions',
-//           concentrationRisk: tokensReceived / property.totalTokens > 0.1 ? 
+//           concentrationRisk: tokensReceived / property.totalTokens > 0.1 ?
 //             'High - Large position relative to total supply' : 'Low',
 //           regulatoryRisk: 'Property investments are subject to regulatory changes'
 //         },
 //         recommendations: {
-//           suitability: investmentAmount < property.minimumInvestment ? 
+//           suitability: investmentAmount < property.minimumInvestment ?
 //             'Below minimum investment threshold' :
-//             investmentAmount > actualInvestment * 0.2 ? 
-//             'Consider smaller initial position for diversification' : 
+//             investmentAmount > actualInvestment * 0.2 ?
+//             'Consider smaller initial position for diversification' :
 //             'Suitable investment size',
 //           diversification: 'Consider spreading investment across multiple properties',
-//           timeHorizon: holdingPeriod < 12 ? 
+//           timeHorizon: holdingPeriod < 12 ?
 //             'Consider longer holding period for better returns' :
 //             'Good holding period for real estate investment'
 //         }
@@ -697,7 +714,7 @@ router.get('/transactions/pending',
 //           }
 
 //           // Boost for diversification (different from current holdings)
-//           const alreadyHoldsType = currentHoldings.some(h => 
+//           const alreadyHoldsType = currentHoldings.some(h =>
 //             h.property?.propertyType === property.propertyType
 //           );
 //           if (!alreadyHoldsType && currentHoldings.length > 0) {
@@ -742,7 +759,7 @@ router.get('/transactions/pending',
 //               fundingProgress: Math.round(fundingProgress),
 //               affordability: affordable ? 'Affordable' : 'Above budget'
 //             },
-//             estimatedTokens: affordable ? 
+//             estimatedTokens: affordable ?
 //               Math.floor((availableBalance * 0.8) / property.tokenPrice) : 0
 //           };
 //         })
@@ -767,18 +784,18 @@ router.get('/transactions/pending',
 //         opportunities: filteredOpportunities,
 //         summary: {
 //           totalFound: filteredOpportunities.length,
-//           avgRecommendationScore: filteredOpportunities.length > 0 ? 
+//           avgRecommendationScore: filteredOpportunities.length > 0 ?
 //             filteredOpportunities.reduce((sum, opp) => sum + opp.recommendationScore, 0) / filteredOpportunities.length : 0,
 //           affordableCount: filteredOpportunities.filter(opp => opp.metrics.affordability === 'Affordable').length
 //         },
 //         insights: {
-//           diversificationOpportunities: filteredOpportunities.filter(opp => 
+//           diversificationOpportunities: filteredOpportunities.filter(opp =>
 //             opp.recommendationReasons.includes('Adds diversification to your portfolio')
 //           ).length,
-//           highYieldOpportunities: filteredOpportunities.filter(opp => 
+//           highYieldOpportunities: filteredOpportunities.filter(opp =>
 //             opp.expectedAnnualReturn > (userPreferences.avgExpectedReturn || 10)
 //           ).length,
-//           emergingMarkets: filteredOpportunities.filter(opp => 
+//           emergingMarkets: filteredOpportunities.filter(opp =>
 //             opp.metrics.fundingProgress < 50
 //           ).length
 //         }
@@ -893,7 +910,7 @@ router.get('/transactions/pending',
 //           const balances = await stellarService.getAccountBalance(userWallets[0].stellarPublicKey);
 //           const ngnBalance = balances.find(b => b.asset_code === 'NGN');
 //           const balance = ngnBalance ? parseFloat(ngnBalance.balance) : 0;
-          
+
 //           if (balance < 1000) { // Less than 1000 NGN
 //             lowBalance = true;
 //             alerts.push({

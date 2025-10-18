@@ -3,6 +3,7 @@ import { sequelize } from "../config/database";
 
 interface PropertyAttributes {
   id: string;
+  creatorId: string;
   title: string;
   description?: string;
   location: string;
@@ -21,6 +22,7 @@ interface PropertyAttributes {
   propertyManager?: string;
   propertyManagerPublicKey?: string;
   status: string;
+  stage: number;  //stage in property lifecycle: 1. property_tokenised 2. token_sold_out 3. creator_paid 4. property_liquidated 5. token_fully_redeemed (end of life of property on the brikkle platform)
   stellarAssetCode?: string;
   stellarAssetIssuer?: string;
   featured: boolean;
@@ -38,6 +40,7 @@ class Property
   implements PropertyAttributes
 {
   public id!: string;
+  public creatorId!: string;
   public title!: string;
   public description?: string;
   public location!: string;
@@ -56,6 +59,7 @@ class Property
   public propertyManager?: string;
   public propertyManagerPublicKey?: string;
   public status!: string;
+  public stage!: number;
   public stellarAssetCode?: string;
   public stellarAssetIssuer?: string;
   public featured!: boolean;
@@ -70,6 +74,10 @@ Property.init(
       type: DataTypes.UUID,
       defaultValue: DataTypes.UUIDV4,
       primaryKey: true,
+    },
+    creatorId: {
+      type: DataTypes.UUID,
+      defaultValue: DataTypes.UUIDV4,
     },
     title: {
       type: DataTypes.STRING,
@@ -158,13 +166,24 @@ Property.init(
     },
     status: {
       type: DataTypes.ENUM(
+        "property_tokenised",
+        "token_sold_out",
+        "property_liquidated",
+        "token_fully_redeemed",
         "active",
         "coming_soon",
         "sold_out",
         "maintenance",
         "inactive"
       ),
-      defaultValue: "active",
+      defaultValue: "coming_soon",
+    },
+    stage: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      validate: {
+        min: 0,
+      },
     },
     stellarAssetCode: {
       type: DataTypes.STRING,

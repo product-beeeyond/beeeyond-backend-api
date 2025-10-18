@@ -8,6 +8,7 @@ export enum UserRole {
   USER = "user",
   ADMIN = "admin",
   SUPER_ADMIN = "super_admin",
+  // PROPERTY_MANAGER = "property_manager"
 }
 
 interface CustomJwtPayload extends JwtPayload {

@@ -256,11 +256,19 @@ export const updatePropertySchema = Joi.object({
     }),
 
   status: Joi.string()
-    .valid("active", "coming_soon", "sold_out", "maintenance", "inactive")
+    .valid(
+      "property_tokenised",
+      "token_sold_out",
+      "property_liquidated",
+      "token_fully_redeemed",
+      "active",
+      "coming_soon",
+      "maintenance",
+      "inactive"
+    )
     .optional()
     .messages({
-      "any.only":
-        "Status must be one of: active, coming_soon, sold_out, maintenance, inactive",
+      "any.only": "Status must be one of accepted types",
     }),
 
   featured: Joi.boolean().optional().messages({
@@ -365,6 +373,56 @@ export const propertySearchSchema = Joi.object({
   }),
 });
 
+export const creatorPaymentSchema = Joi.object({
+  propertyId: Joi.string().uuid().required().messages({
+    "string.guid": "Valid property ID is required",
+    "any.required": "Property ID is required",
+  }),
+  amount: Joi.number().positive().min(0.01).required().messages({
+    "number.positive": "Amount must be a positive number",
+    "number.min": "Amount must be at least 0.01",
+    "any.required": "Amount is required",
+  }),
+});
+
+export const liquidatePropertySchema = Joi.object({
+  propertyId: Joi.string().uuid().required().messages({
+    "string.guid": "Valid property ID is required",
+    "any.required": "Property ID is required",
+  }),
+  saleAmount: Joi.number().positive().min(0.01).required().messages({
+    "number.positive": "Sale amount must be a positive number",
+    "number.min": "Sale amount must be at least 0.01",
+    "any.required": "Sale amount is required",
+  }),
+});
+
+export const redemptionTransactionSchema = Joi.object({
+  propertyId: Joi.string().uuid().required().messages({
+    "string.guid": "Valid property ID is required",
+    "any.required": "Property ID is required",
+  }),
+  quantity: Joi.number().integer().positive().min(1).required().messages({
+    "number.integer": "Quantity must be a whole number",
+    "number.positive": "Quantity must be positive",
+    "number.min": "Quantity must be at least 1",
+    "any.required": "Quantity is required",
+  }),
+});
+
+export const validateSaleTransaction = (req: any, res: any, next: any) => {
+  const { error, value } = redemptionTransactionSchema.validate(req.body, {
+    abortEarly: false,
+    allowUnknown: false,
+  });
+  if (error) {
+    return res.status(400).json({
+      message: "Sale validation error",
+      error: error.details,
+    });
+  }
+  next();
+};
 // ===========================================
 // WALLET CREATION SCHEMA
 // ===========================================
@@ -404,7 +462,16 @@ export const propertyFiltersSchema = Joi.object({
     .valid("residential", "commercial", "mixed_use", "industrial")
     .optional(),
   status: Joi.string()
-    .valid("active", "coming_soon", "sold_out", "maintenance", "inactive")
+    .valid(
+      "property_tokenised",
+      "token_sold_out",
+      "property_liquidated",
+      "token_fully_redeemed",
+      "active",
+      "coming_soon",
+      "maintenance",
+      "inactive"
+    )
     .optional(),
   featured: Joi.boolean().optional(),
   minPrice: Joi.number().positive().optional(),

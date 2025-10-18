@@ -81,7 +81,9 @@ export const CreateProperty = async (req: AuthRequest, res: Response) => {
         propertyManagerPublicKey,
         status: "coming_soon", // Start as coming_soon until fully set up
         featured: featured || false,
-      },
+        creatorId: "",
+        stage: 0
+      }
       // { transaction: dbTransaction }
     );
 
@@ -116,8 +118,10 @@ export const CreateProperty = async (req: AuthRequest, res: Response) => {
       {
         stellarAssetCode: tokenizationResult.assetCode,
         stellarAssetIssuer: tokenizationResult.assetIssuer,
-        status: "active", // Now fully set up and ready for investment
-      },
+        status: "property_tokenised", // Now fully set up and ready for investment
+        creatorId: req.user!.id,
+        stage: 1
+      }
       // { transaction: dbTransaction }
     );
 
@@ -261,7 +265,7 @@ export const GetAllProperties = async (req: AuthRequest, res: Response) => {
       limit = 20,
       location,
       propertyType,
-      status = "active",
+      status = "property_tokenised",
       featured,
       minPrice,
       maxPrice,
@@ -334,11 +338,7 @@ export const GetSingleProperty = async (req: AuthRequest, res: Response) => {
           as: "multiSigWallets",
           where: { status: "active" },
           required: false,
-          attributes: [
-            "stellarPublicKey",
-            "walletType",
-            "status",
-          ],
+          attributes: ["stellarPublicKey", "walletType", "status"],
         },
       ],
     });
@@ -560,8 +560,8 @@ export const createPropertyWallets = async (
 
     // Update property with wallet information
     await property.update({
-      stellarAssetCode: `PROP${propertyId.substring(0, 8).toUpperCase()}`,
-      stellarAssetIssuer: walletResult.distributionWallet.publicKey,
+      // stellarAssetCode: `PROP${propertyId.substring(0, 8).toUpperCase()}`,
+      // stellarAssetIssuer: walletResult.distributionWallet.publicKey,
     });
 
     logger.info(
