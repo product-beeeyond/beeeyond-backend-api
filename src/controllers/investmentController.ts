@@ -736,6 +736,7 @@ export const BuyPropertyToken = async (req: AuthRequest, res: Response) => {
       defaults: {
         userId,
         propertyId,
+        tokensRedeemed: 0,
         tokensOwned: 0,
         totalInvested: 0,
         currentValue: 0,
@@ -1384,28 +1385,34 @@ export const SellPropertyToken = async (req: AuthRequest, res: Response) => {
       }),
     ]);
 
-    if (!property || !property.stellarAssetCode || !property.stellarAssetIssuer) {
+    if (
+      !property ||
+      !property.stellarAssetCode ||
+      !property.stellarAssetIssuer
+    ) {
       await dbTransaction.rollback();
-      return res.status(404).json({ error: "Property not found or missing asset details" });
+      return res
+        .status(404)
+        .json({ error: "Property not found or missing asset details" });
     }
 
-// Property must be liquidated before redemption
+    // Property must be liquidated before redemption
     if (property.status !== "property_liquidated") {
       await dbTransaction.rollback();
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        error: "Property must be liquidated before tokens can be redeemed" 
+        error: "Property must be liquidated before tokens can be redeemed",
       });
     }
 
- if (property.stage !== 4) {
+    if (property.stage !== 4) {
       await dbTransaction.rollback();
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        error: "Property tokens cannot be redeemed yet as property has not been liquidated" 
+        error:
+          "Property tokens cannot be redeemed yet as property has not been liquidated",
       });
     }
-
 
     if (!holding || holding.tokensOwned < quantity) {
       await dbTransaction.rollback();
@@ -1446,6 +1453,50 @@ export const SellPropertyToken = async (req: AuthRequest, res: Response) => {
     const platformFee = totalAmount * 0.025; // 2.5% platform fee
     const netAmount = totalAmount - platformFee;
 
+    const issuerWallet = await MultiSigWallet.findOne({
+      where: { walletType: "platform_issuer", status: "active" },
+      transaction: dbTransaction,
+    });
+
+    if (!issuerWallet) {
+      await dbTransaction.rollback();
+      return res.status(400).json({
+        success: false,
+        error: "Platform issuer wallet not found",
+      });
+    }
+
+    const walletBalances = await stellarService.getAccountBalance(
+      propertyWallet.stellarPublicKey
+    );
+
+    const bNGNBalance = walletBalances.find(
+      (b) =>
+        b.asset_code === "bNGN" &&
+        b.asset_issuer === issuerWallet.stellarPublicKey
+    );
+
+    if (!bNGNBalance || parseFloat(bNGNBalance.balance) < totalAmount) {
+      await dbTransaction.rollback();
+      return res.status(400).json({
+        success: false,
+        error:
+          "Insufficient bNGN in property distribution wallet for redemption",
+      });
+    }
+    // Get platform primary wallet for fee collection
+    const platformWallet = await MultiSigWallet.findOne({
+      where: { walletType: "platform_primary", status: "active" },
+      transaction: dbTransaction,
+    });
+
+    if (!platformWallet) {
+      await dbTransaction.rollback();
+      return res.status(400).json({
+        success: false,
+        error: "Platform wallet not found",
+      });
+    }
     // Create multisig transaction for the sale
     const multisigTransaction = await MultiSigTransaction.create(
       {
@@ -1477,10 +1528,12 @@ export const SellPropertyToken = async (req: AuthRequest, res: Response) => {
       const stellarTxHash = await stellarService.executeTokenSale({
         userWalletPublicKey: userWallet.stellarPublicKey,
         propertyWalletPublicKey: propertyWallet.stellarPublicKey,
+        platformWalletPublicKey: platformWallet.stellarPublicKey,
         assetCode: property.stellarAssetCode,
         assetIssuer: property.stellarAssetIssuer,
         amount: quantity.toString(),
         proceedsAmount: netAmount.toString(),
+        platformFee: platformFee.toString(),
       });
 
       // Update multisig transaction
@@ -1515,24 +1568,26 @@ export const SellPropertyToken = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    // Update property available tokens
-    await property.update(
-      {
-        availableTokens: property.availableTokens + quantity,
-      },
-      { transaction: dbTransaction }
-    );
+    // // Update property available tokens
+    // await property.update(
+    //   {
+    //     availableTokens: property.availableTokens + quantity,
+    //   },
+    //   { transaction: dbTransaction }
+    // );
 
     // Update holding
     const newTokensOwned = holding.tokensOwned - quantity;
     const proportionalInvestment =
       (quantity / holding.tokensOwned) * holding.totalInvested;
     const newTotalInvested = holding.totalInvested - proportionalInvestment;
+    const tokensRedeemed = (holding.tokensRedeemed || 0) + quantity;
 
     if (newTokensOwned > 0) {
       await holding.update(
         {
           tokensOwned: newTokensOwned,
+          tokensRedeemed,
           totalInvested: newTotalInvested,
           currentValue: newTokensOwned * pricePerToken,
           averagePrice: newTotalInvested / newTokensOwned,
@@ -1540,10 +1595,40 @@ export const SellPropertyToken = async (req: AuthRequest, res: Response) => {
         { transaction: dbTransaction }
       );
     } else {
+      // Update with final redeemed count before destroying
+      await holding.update(
+        {
+          tokensOwned: 0,
+          tokensRedeemed,
+          currentValue: 0,
+        },
+        { transaction: dbTransaction }
+      );
       // Remove holding if no tokens left
       await holding.destroy({ transaction: dbTransaction });
     }
 
+    // Check if all tokens have been redeemed across all holders
+    const totalTokensRedeemed =
+      (await PropertyHolding.sum("tokensRedeemed", {
+        where: { propertyId },
+        transaction: dbTransaction,
+      })) || 0;
+
+    // If all tokens redeemed, update to stage 5
+    if (totalTokensRedeemed >= property.totalTokens) {
+      await property.update(
+        {
+          stage: 5,
+          status: "token_fully_redeemed",
+        },
+        { transaction: dbTransaction }
+      );
+
+      logger.info(
+        `All tokens redeemed for property ${propertyId}. Status: token_fully_redeemed, Stage: 5`
+      );
+    }
     await dbTransaction.commit();
 
     // Send notifications
@@ -1577,10 +1662,15 @@ export const SellPropertyToken = async (req: AuthRequest, res: Response) => {
         multisigTransactionId: multisigTransaction.id,
         stellarTxHash: multisigTransaction.executionTxHash,
         quantity,
+        pricePerToken,
         totalAmount,
         platformFee,
         netAmount,
         status: "executed",
+      },
+      holding: {
+        tokensOwned: newTokensOwned,
+        tokensRedeemed,
       },
     });
   } catch (error) {

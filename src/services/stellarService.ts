@@ -76,10 +76,12 @@ interface PropertyLiquidationParams {
 interface TokenSaleParams {
   userWalletPublicKey: string;
   propertyWalletPublicKey: string;
+  platformWalletPublicKey: string;
   assetCode: string;
   assetIssuer: string;
   amount: string;
   proceedsAmount: string;
+  platformFee: string;
 }
 class StellarService {
   private server: Horizon.Server;
@@ -3163,97 +3165,123 @@ class StellarService {
       const {
         userWalletPublicKey,
         propertyWalletPublicKey,
+        platformWalletPublicKey,
         assetCode,
         assetIssuer,
         amount,
         proceedsAmount,
+        platformFee,
       } = params;
-      if (
-        !userWalletPublicKey ||
-        !propertyWalletPublicKey ||
-        !assetCode ||
-        !assetIssuer ||
-        !amount ||
-        !proceedsAmount
-      ) {
-        throw new Error("All parameters are required for token sale");
-      }
-
-      // Get issuer wallet to determine bNGN issuer
-      const issuerWallet = await MultiSigWallet.findOne({
-        where: { walletType: "platform_issuer", status: "active" },
-      });
-
-      if (!issuerWallet) {
-        throw new Error("Platform issuer wallet not found");
-      }
-      const propertyAsset = new Asset(assetCode, assetIssuer);
-      const bNGNAsset = new Asset("bNGN", issuerWallet.stellarPublicKey);
-
-      // Ensure user wallet has trustline for bNGN
-      await this.ensureTrustlines(userWalletPublicKey, [
-        { assetCode: "bNGN", assetIssuer: issuerWallet.stellarPublicKey },
-      ]);
-
-      // Get user wallet to retrieve user signer
-      const userWallet = await MultiSigWallet.findOne({
-        where: { stellarPublicKey: userWalletPublicKey, status: "active" },
-      });
-
-      if (!userWallet) {
-        throw new Error("User wallet not found");
-      }
-      // let signerKeypair: Keypair;
-
-      // Get user's signer keypair
-      const signerKeypair = await secureWalletService.getKeypairFromStorage(
-        userWallet.id,
-        "user"
-      );
-      const userAccount = await this.server.loadAccount(userWalletPublicKey);
-
-      const transaction = new TransactionBuilder(userAccount, {
-        fee: BASE_FEE,
-        networkPassphrase: this.network,
-      })
-        .addOperation(
-          Operation.payment({
-            destination: propertyWalletPublicKey,
-            asset: propertyAsset,
-            amount: amount,
-          })
-        )
-        .addOperation(
-          Operation.payment({
-            destination: userWalletPublicKey,
-            asset: bNGNAsset,
-            amount: proceedsAmount,
-            source: propertyWalletPublicKey,
-          })
-        )
-        .setTimeout(180)
-        .build();
-
-      transaction.sign(signerKeypair);
-      transaction.sign(await this.getPlatformKeypair("platform"));
-
-      const result = await this.submitTransactionWithFeeBump(
-        transaction,
-        signerKeypair
-      );
-
-      logger.info(
-        `Token sale executed: ${amount} ${assetCode} from ${userWalletPublicKey}`
-      );
-      return result.hash;
-    } catch (error) {
-      logger.error("Error executing token sale:", error);
-      throw new Error(
-        `Failed to execute token sale: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`
-      );
+   if (
+      !userWalletPublicKey ||
+      !propertyWalletPublicKey ||
+      !platformWalletPublicKey ||
+      !assetCode ||
+      !assetIssuer ||
+      !amount ||
+      !proceedsAmount ||
+      !platformFee
+    ) {
+      throw new Error("All parameters are required for token redemption");
     }
+
+    // Get issuer wallet to determine bNGN issuer
+    const issuerWallet = await MultiSigWallet.findOne({
+      where: { walletType: "platform_issuer", status: "active" },
+    });
+
+    if (!issuerWallet) {
+      throw new Error("Platform issuer wallet not found");
+    }
+
+    const propertyAsset = new Asset(assetCode, assetIssuer);
+    const bNGNAsset = new Asset("bNGN", issuerWallet.stellarPublicKey);
+
+    // Ensure user wallet has trustline for bNGN
+    await this.ensureTrustlines(userWalletPublicKey, [
+      { assetCode: "bNGN", assetIssuer: issuerWallet.stellarPublicKey },
+    ]);
+
+    // Ensure platform wallet has trustline for bNGN
+    await this.ensureTrustlines(platformWalletPublicKey, [
+      { assetCode: "bNGN", assetIssuer: issuerWallet.stellarPublicKey },
+    ]);
+
+    // Get user wallet to retrieve user signer
+    const userWallet = await MultiSigWallet.findOne({
+      where: { stellarPublicKey: userWalletPublicKey, status: "active" },
+    });
+
+    if (!userWallet) {
+      throw new Error("User wallet not found");
+    }
+
+    // Get user's signer keypair
+    const signerKeypair = await secureWalletService.getKeypairFromStorage(
+      userWallet.id,
+      "user"
+    );
+
+    const userAccount = await this.server.loadAccount(userWalletPublicKey);
+
+    const transaction = new TransactionBuilder(userAccount, {
+      fee: BASE_FEE,
+      networkPassphrase: this.network,
+    })
+      // 1. User sends property tokens to issuer (burns them)
+      .addOperation(
+        Operation.payment({
+          destination: assetIssuer, // Send to issuer = burn
+          asset: propertyAsset,
+          amount: amount,
+        })
+      )
+      // 2. Property distribution wallet sends net bNGN to user
+      .addOperation(
+        Operation.payment({
+          destination: userWalletPublicKey,
+          asset: bNGNAsset,
+          amount: proceedsAmount,
+          source: propertyWalletPublicKey,
+        })
+      )
+      // 3. Property distribution wallet sends platform fee to platform wallet
+      .addOperation(
+        Operation.payment({
+          destination: platformWalletPublicKey,
+          asset: bNGNAsset,
+          amount: platformFee,
+          source: propertyWalletPublicKey,
+        })
+      )
+      .setTimeout(180)
+      .build();
+
+    // Sign with user key (for token burn)
+    transaction.sign(signerKeypair);
+    
+    // Sign with platform key (for bNGN payments from property wallet)
+    transaction.sign(await this.getPlatformKeypair("platform"));
+
+    const result = await this.submitTransactionWithFeeBump(
+      transaction,
+      signerKeypair
+    );
+
+    logger.info(
+      `Token redemption executed: ${amount} ${assetCode} burned from ${userWalletPublicKey}, ${proceedsAmount} bNGN paid to user, ${platformFee} bNGN platform fee. Hash: ${result.hash}`
+    );
+
+    return result.hash;
+  } catch (error) {
+    logger.error("Error executing token redemption:", error);
+    throw new Error(
+      `Failed to execute token redemption: ${
+        error instanceof Error ? error.message : "Unknown error"
+      }`
+    );
+  }
+
   }
 
   /**
