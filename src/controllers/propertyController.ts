@@ -81,8 +81,8 @@ export const CreateProperty = async (req: AuthRequest, res: Response) => {
         propertyManagerPublicKey,
         status: "coming_soon", // Start as coming_soon until fully set up
         featured: featured || false,
-        creatorId: "",
-        stage: 0
+        creatorId: req.user!.id,
+        stage: 0,
       }
       // { transaction: dbTransaction }
     );
@@ -119,8 +119,7 @@ export const CreateProperty = async (req: AuthRequest, res: Response) => {
         stellarAssetCode: tokenizationResult.assetCode,
         stellarAssetIssuer: tokenizationResult.assetIssuer,
         status: "property_tokenised", // Now fully set up and ready for investment
-        creatorId: req.user!.id,
-        stage: 1
+        stage: 1,
       }
       // { transaction: dbTransaction }
     );

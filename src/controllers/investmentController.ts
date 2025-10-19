@@ -641,6 +641,23 @@ export const BuyPropertyToken = async (req: AuthRequest, res: Response) => {
           "Insufficient tokens available, please check property's available tokens",
       });
     }
+    // Check 15% ownership limit
+    const maxAllowedTokens = Math.floor(property.totalTokens * 0.15);
+    const currentHolding = await PropertyHolding.findOne({
+      where: { userId, propertyId },
+      transaction: dbTransaction,
+    });
+
+    const currentlyOwnedTokens = currentHolding?.tokensOwned || 0;
+    const tokensAfterPurchase = currentlyOwnedTokens + quantity;
+
+    if (tokensAfterPurchase > maxAllowedTokens) {
+      await dbTransaction.rollback();
+      return res.status(400).json({
+        success: false,
+        error: `Cannot purchase more than 15% of property tokens. Maximum allowed: ${maxAllowedTokens}, currently owned: ${currentlyOwnedTokens}, attempting to own: ${tokensAfterPurchase}`,
+      });
+    }
 
     // Get user's multisig wallet
     const userWallet = await MultiSigWallet.findOne({
@@ -701,7 +718,7 @@ export const BuyPropertyToken = async (req: AuthRequest, res: Response) => {
       {
         multiSigWalletId: userWallet.id,
         transactionXDR: "", // Will be populated by stellar service
-        description: `Purchase ${quantity} tokens of ${property.title}`,
+        description: `Purchase ${quantity} tokens of ${property.stellarAssetCode} ${property.title}`,
         category: "fund_management",
         requiredSignatures: 1, // User wallet needs 1 signature
         status: "pending",
