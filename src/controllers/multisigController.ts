@@ -54,12 +54,6 @@ export const createUserMultisigWallet = async (
       userName: `${user.firstName} ${user.lastName}`.trim(),
     });
 
-    // // Fund wallet with minimum XLM for operations
-    // await stellarService.fundWalletFromTreasury(
-    //   walletResult.publicKey,
-    //   '2' // 2 XLM minimum reserve
-    // );
-
     logger.info(
       `User  wallet created for ${user.email}: ${walletResult.publicKey}`
     );

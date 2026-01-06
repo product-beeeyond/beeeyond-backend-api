@@ -673,13 +673,19 @@ export const BuyPropertyToken = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    // Check wallet balance (would need to implement balance checking via Stellar)
+    // Check wallet balance
     const walletBalances = await stellarService.getAccountBalance(
       userWallet.stellarPublicKey
     );
     const bngnBalance = walletBalances.find((b) => b.asset_code === "bNGN");
 
     if (!bngnBalance || parseFloat(bngnBalance.balance) < totalAmount) {
+      console.log(
+        "-------xx---------",
+        walletBalances,
+        "-------xx-----",
+        totalAmount
+      );
       await dbTransaction.rollback();
       return res.status(400).json({ error: "Insufficient wallet balance" });
     }
@@ -822,6 +828,19 @@ export const BuyPropertyToken = async (req: AuthRequest, res: Response) => {
       });
     }
 
+    // Re-validate property available tokens
+    const reProperty = await Property.findByPk(propertyId, {
+      transaction: dbTransaction,
+    });
+    if (reProperty && reProperty.availableTokens < 1) {
+      await reProperty.update(
+        { status: "token_sold_out", stage: 2 },
+        { transaction: dbTransaction }
+      );
+      logger.info(
+        `Property status updated. Status: token_sold_out  propertyId: ${reProperty.id} updatedBy: ${userId}`
+      );
+    }
     await dbTransaction.commit();
 
     // Send notifications
@@ -1018,12 +1037,14 @@ export const PayCreator = async (req: AuthRequest, res: Response) => {
       });
     }
 
+    const currentBalance = parseFloat(bNGNBalance.balance);
+
     // Create multisig transaction
     const multisigTransaction = await MultiSigTransaction.create(
       {
         multiSigWalletId: propertyWallet.id,
         transactionXDR: "",
-        description: `Pay creator ${creatorAmount} bNGN for ${property.title}`,
+        description: `Pay creator ${creatorAmount} bNGN for ${property.title} (Partial payment)`,
         category: "fund_management",
         requiredSignatures: 1,
         status: "pending",
@@ -1035,6 +1056,7 @@ export const PayCreator = async (req: AuthRequest, res: Response) => {
           creatorAmount,
           platformFee,
           creatorId: property.creatorId,
+          balanceBeforePayment: currentBalance,
         },
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       },
@@ -1061,18 +1083,45 @@ export const PayCreator = async (req: AuthRequest, res: Response) => {
         { transaction: dbTransaction }
       );
 
-      // Update property stage to creator_paid
-      await property.update({ stage: 3 }, { transaction: dbTransaction });
+      // Check remaining balance after payment
+      const updatedWalletBalances = await stellarService.getAccountBalance(
+        propertyWallet.stellarPublicKey
+      );
+      const updatedBNGNBalance = updatedWalletBalances.find(
+        (b) =>
+          b.asset_code === "bNGN" &&
+          b.asset_issuer === issuerWallet.stellarPublicKey
+      );
+
+      const remainingBalance = updatedBNGNBalance
+        ? parseFloat(updatedBNGNBalance.balance)
+        : 0;
+
+      //  less than 0.01 bNGN to account for rounding
+      const DEPLETION_THRESHOLD = 0.01;
+      const isWalletDepleted = remainingBalance < DEPLETION_THRESHOLD;
+
+      // Only update stage to creator_paid if wallet is depleted
+      if (isWalletDepleted) {
+        await property.update({ stage: 3 }, { transaction: dbTransaction });
+        logger.info(
+          `Property wallet depleted. Property ${propertyId} stage updated to: 3 (creator_paid)`
+        );
+      }
 
       await dbTransaction.commit();
 
       logger.info(
-        `Creator payment executed: ${creatorAmount} bNGN to creator, ${platformFee} bNGN platform fee. Property: ${propertyId}, Stage updated to: 3`
+        `Creator payment executed: ${creatorAmount} bNGN to creator, ${platformFee} bNGN platform fee. Property: ${propertyId}. Remaining balance: ${remainingBalance} bNGN. Stage: ${
+          isWalletDepleted ? 3 : 2
+        }`
       );
 
       res.status(200).json({
         success: true,
-        message: "Creator payment successful",
+        message: isWalletDepleted
+          ? "Creator payment successful - All funds depleted, property marked as creator_paid"
+          : "Creator partial payment successful - More funds remain in property wallet",
         transaction: {
           id: multisigTransaction.id,
           stellarTxHash: multisigTransaction.executionTxHash,
@@ -1084,7 +1133,9 @@ export const PayCreator = async (req: AuthRequest, res: Response) => {
         property: {
           id: property.id,
           title: property.title,
-          stage: 3,
+          stage: isWalletDepleted ? 3 : 2,
+          remainingBalance,
+          isFullyPaid: isWalletDepleted,
         },
       });
     } catch (stellarError) {
@@ -1260,10 +1311,10 @@ export const LiquidateProperty = async (req: AuthRequest, res: Response) => {
       await dbTransaction.rollback();
       return res.status(400).json({
         success: false,
-        error: "Insufficient bNGN in buyer wallet",
+        error: "Insufficient bNGN in property manager's wallet",
       });
     }
-
+    const oldPricePerToken = property.tokenPrice;
     // Calculate new price per token
     const newPricePerToken = saleAmount / property.totalTokens;
 
@@ -1281,7 +1332,7 @@ export const LiquidateProperty = async (req: AuthRequest, res: Response) => {
           transactionType: "property_liquidation",
           propertyId,
           saleAmount,
-          oldPricePerToken: property.tokenPrice,
+          oldPricePerToken,
           newPricePerToken,
         },
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
@@ -1350,7 +1401,7 @@ export const LiquidateProperty = async (req: AuthRequest, res: Response) => {
           title: property.title,
           status: "property_liquidated",
           stage: 4,
-          oldPricePerToken: property.tokenPrice,
+          oldPricePerToken,
           newPricePerToken,
         },
       });

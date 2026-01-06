@@ -317,7 +317,6 @@ const sendPasswordResetNotification = async (data: {
   console.log(`Sending password reset notification to ${data.email}`);
 };
 
-
 /**
  * Get recovery audit log
  * GET /api/admin/recovery/:requestId/audit

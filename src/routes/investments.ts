@@ -121,7 +121,7 @@ router.post(
   LiquidateProperty
 );
 /**
- * Sell property tokens
+ * Redeem property tokens
  * POST /api/investments/sell
  */
 router.post('/sell',
