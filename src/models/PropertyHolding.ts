@@ -1,11 +1,12 @@
-import { DataTypes, Model, Optional } from 'sequelize';
-import { sequelize } from '../config/database';
+import { DataTypes, Model, Optional } from "sequelize";
+import { sequelize } from "../config/database";
 
 interface PropertyHoldingAttributes {
   id: string;
   userId: string;
   propertyId: string;
   tokensOwned: number;
+  tokensRedeemed: number;
   totalInvested: number;
   currentValue: number;
   averagePrice: number;
@@ -13,13 +14,20 @@ interface PropertyHoldingAttributes {
   updatedAt?: Date;
 }
 
-type PropertyHoldingCreationAttributes = Optional<PropertyHoldingAttributes, 'id' | 'createdAt' | 'updatedAt'>
+type PropertyHoldingCreationAttributes = Optional<
+  PropertyHoldingAttributes,
+  "id" | "createdAt" | "updatedAt"
+>;
 
-class PropertyHolding extends Model<PropertyHoldingAttributes, PropertyHoldingCreationAttributes> implements PropertyHoldingAttributes {
+class PropertyHolding
+  extends Model<PropertyHoldingAttributes, PropertyHoldingCreationAttributes>
+  implements PropertyHoldingAttributes
+{
   public id!: string;
   public userId!: string;
   public propertyId!: string;
   public tokensOwned!: number;
+  public tokensRedeemed!: number;
   public totalInvested!: number;
   public currentValue!: number;
   public averagePrice!: number;
@@ -38,18 +46,10 @@ PropertyHolding.init(
     userId: {
       type: DataTypes.UUID,
       allowNull: false,
-      references: {
-        model: 'users',
-        key: 'id',
-      },
     },
     propertyId: {
       type: DataTypes.UUID,
       allowNull: false,
-      references: {
-        model: 'properties',
-        key: 'id',
-      },
     },
     tokensOwned: {
       type: DataTypes.INTEGER,
@@ -64,6 +64,11 @@ PropertyHolding.init(
       validate: {
         min: 0,
       },
+    },
+    tokensRedeemed: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0,
+      allowNull: false,
     },
     currentValue: {
       type: DataTypes.DECIMAL(12, 2),
@@ -82,12 +87,12 @@ PropertyHolding.init(
   },
   {
     sequelize,
-    modelName: 'PropertyHolding',
-    tableName: 'property_holdings',
+    modelName: "PropertyHolding",
+    tableName: "property_holdings",
     indexes: [
-      { fields: ['userId'] },
-      { fields: ['propertyId'] },
-      { fields: ['userId', 'propertyId'], unique: true },
+      { fields: ["userId"] },
+      { fields: ["propertyId"] },
+      { fields: ["userId", "propertyId"], unique: true },
     ],
   }
 );

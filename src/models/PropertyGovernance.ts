@@ -84,10 +84,6 @@ PropertyGovernance.init(
     propertyId: {
       type: DataTypes.UUID,
       allowNull: false,
-      references: {
-        model: 'properties',
-        key: 'id',
-      },
     },
     proposalType: {
       type: DataTypes.ENUM('property_sale', 'major_renovation', 'management_change', 'rent_adjustment', 'dividend_distribution'),
@@ -108,10 +104,6 @@ PropertyGovernance.init(
     proposerId: {
       type: DataTypes.UUID,
       allowNull: false,
-      references: {
-        model: 'users',
-        key: 'id',
-      },
     },
     proposerTokenBalance: {
       type: DataTypes.INTEGER,
@@ -166,10 +158,6 @@ PropertyGovernance.init(
     multiSigTransactionId: {
       type: DataTypes.UUID,
       allowNull: true,
-      references: {
-        model: 'multisig_transactions',
-        key: 'id',
-      },
     },
     executionTxHash: {
       type: DataTypes.STRING(64),

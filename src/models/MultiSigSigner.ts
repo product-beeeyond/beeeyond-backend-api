@@ -14,13 +14,14 @@ export interface MultiSigSignerAttributes {
     | "platform_secondary"
     | "platform_tertiary"
     | "platform_issuer"
+    | "platform_backup"
+    | "platform_backup_2"
     | "issuer_backup"
     | "property_distribution"
     | "property_governance"
     | "property_manager"
     | "governance_key";
   status: "active" | "inactive" | "recovered" | "pending";
-  encryptedPrivateKey?: string; // Only for platform-controlled keys
   encryptedSecretId?: string;
   metadata?: object;
   createdAt?: Date;
@@ -48,13 +49,14 @@ class MultiSigSigner
     | "platform_secondary"
     | "platform_tertiary"
     | "platform_issuer"
+    | "platform_backup"
+    | "platform_backup_2"
     | "issuer_backup"
     | "property_distribution"
     | "property_governance"
     | "property_manager"
     | "governance_key";
   public status!: "active" | "inactive" | "recovered" | "pending";
-  public encryptedPrivateKey?: string;
   public encryptedSecretId?: string;
   public metadata?: object;
 
@@ -72,18 +74,10 @@ MultiSigSigner.init(
     multiSigWalletId: {
       type: DataTypes.UUID,
       allowNull: false,
-      references: {
-        model: "multisig_wallets",
-        key: "id",
-      },
     },
     userId: {
       type: DataTypes.UUID,
       allowNull: true,
-      references: {
-        model: "users",
-        key: "id",
-      },
     },
     publicKey: {
       type: DataTypes.STRING,
@@ -109,6 +103,8 @@ MultiSigSigner.init(
         "platform_tertiary",
         "platform_issuer",
         "issuer_backup",
+        "platform_backup",
+        "platform_backup_2",
         "property_distribution",
         "property_governance",
         "property_manager",
@@ -117,45 +113,45 @@ MultiSigSigner.init(
       allowNull: false,
     },
     status: {
-      type: DataTypes.ENUM("active", "inactive", "recovered"),
+      type: DataTypes.ENUM("active", "inactive", "recovered", "pending"),
       defaultValue: "active",
     },
     encryptedSecretId: {
       type: DataTypes.STRING,
       allowNull: true,
     },
-    encryptedPrivateKey: {
-      type: DataTypes.TEXT,
-      allowNull: true,
-      validate: {
-        platformKeysOnly(value: string | null) {
-          const platformRoles = [
-            "platform_recovery",
-            "platform_primary",
-            "platform_secondary",
-            "platform_tertiary",
-            "platform_issuer",
-            "issuer_backup",
-            "property_distribution",
-            "property_governance",
-            "property_manager",
-            "governance_key",
-          ];
+    // encryptedPrivateKey: {
+    //   type: DataTypes.TEXT,
+    //   allowNull: true,
+    //   validate: {
+    //     platformKeysOnly(value: string | null) {
+    //       const platformRoles = [
+    //         "platform_recovery",
+    //         "platform_primary",
+    //         "platform_secondary",
+    //         "platform_tertiary",
+    //         "platform_issuer",
+    //         "issuer_backup",
+    //         "property_distribution",
+    //         "property_governance",
+    //         "property_manager",
+    //         "governance_key",
+    //       ];
 
-          if (platformRoles.includes(String(this.role)) && !value) {
-            throw new Error(
-              "Platform-controlled signers must have encrypted private key"
-            );
-          }
+    //       if (platformRoles.includes(String(this.role)) && !value) {
+    //         throw new Error(
+    //           "Platform-controlled signers must have encrypted private key"
+    //         );
+    //       }
 
-          if (this.role === "user" && value) {
-            throw new Error(
-              "User signers should not have encrypted private key stored"
-            );
-          }
-        },
-      },
-    },
+    //       if (this.role === "user" && value) {
+    //         throw new Error(
+    //           "User signers should not have encrypted private key stored"
+    //         );
+    //       }
+    //     },
+    //   },
+    // },
     metadata: {
       type: DataTypes.JSONB,
       allowNull: true,

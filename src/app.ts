@@ -16,7 +16,7 @@ import logger from "./utils/logger";
 import { FRONTEND_URL, NODE_ENV, PORT } from "./config";
 import { apiLimiter } from "./middleware/rateLimit";
 import { bootstrapSuperAdmin } from './bootstrapSuper';
-
+import './models/Associations'; 
 // Load environment variables
 dotenv.config();
 
