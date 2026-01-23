@@ -86,9 +86,6 @@ interface TokenSaleParams {
 class StellarService {
   private server: Horizon.Server;
   private network: string;
-  // private platformKeypair: Keypair;
-  // private recoveryKeypair: Keypair;
-  // private treasuryKeypair: Keypair;
   private _platformKeypairs: Map<string, Keypair> = new Map();
 
   // private async getPlatformKeypair(
