@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Router } from "express";
 import authRoutes from "./auth";
-// import propertyRoutes from './properties';
-// import investmentRoutes from './investments';
+import propertyRoutes from './properties';
+import investmentRoutes from './investments';
 import adminRoutes from "./admin";
 import superAdminRoutes from "./superAdmin";
 import userRoutes from "./user";
@@ -37,13 +37,12 @@ setInterval(async () => {
 }, 1000 * 60 * 4); // Every 4 minutes
 
 router.use("/auth", authLimiter, authRoutes);
-// router.use('/properties', propertyRoutes);
-// router.use('/investments', investmentRoutes);
+router.use('/properties', propertyRoutes);
+router.use('/investments', investmentRoutes);
 router.use("/user", userRoutes);
 router.use("/admin", adminRoutes);
 router.use("/super-admin", superAdminRoutes);
 router.use('/multisig/wallet', multisigRoutes);
 // router.use('/api/recovery', recoveryRoutes);
 // app.use('/api/admin/recovery', adminRecoveryRoutes);
-
 export default router;

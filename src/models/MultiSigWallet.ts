@@ -9,9 +9,11 @@ interface MultiSigWalletAttributes {
   propertyId?: string; // Only for property wallets
   stellarPublicKey: string;
   walletType:
-    | "user_recovery"
+    | "user"
+    | "platform_primary"
     | "platform_treasury"
     | "platform_issuer"
+    | "platform_recovery_batch"
     | "platform_distribution"
     | "platform_fee_collection"
     | "property_distribution"
@@ -60,9 +62,11 @@ class MultiSigWallet
   public propertyId?: string;
   public stellarPublicKey!: string;
   public walletType!:
-    | "user_recovery"
+    | "user"
+    | "platform_primary"
     | "platform_treasury"
     | "platform_issuer"
+    | "platform_recovery_batch"
     | "platform_distribution"
     | "platform_fee_collection"
     | "property_distribution"
@@ -112,14 +116,10 @@ MultiSigWallet.init(
     userId: {
       type: DataTypes.UUID,
       allowNull: true,
-      references: {
-        model: "users",
-        key: "id",
-      },
       validate: {
         userWalletMustHaveUserId(value: string | null) {
-          if (this.walletType === "user_recovery" && !value) {
-            throw new Error("User recovery wallets must have a userId");
+          if (this.walletType === "user" && !value) {
+            throw new Error("User wallets must have a userId");
           }
         },
       },
@@ -127,10 +127,6 @@ MultiSigWallet.init(
     propertyId: {
       type: DataTypes.UUID,
       allowNull: true,
-      references: {
-        model: "properties",
-        key: "id",
-      },
       validate: {
         propertyWalletMustHavePropertyId(value: string | null) {
           if (
@@ -154,9 +150,11 @@ MultiSigWallet.init(
     },
     walletType: {
       type: DataTypes.ENUM(
-        "user_recovery",
+        "user",
+        "platform_primary",
         "platform_treasury",
         "platform_issuer",
+        "platform_recovery_batch",
         "platform_distribution",
         "platform_fee_collection",
         "property_distribution",
@@ -209,9 +207,9 @@ MultiSigWallet.init(
     createdTxHash: {
       type: DataTypes.STRING,
       allowNull: true,
-      validate: {
-        len: [64, 64], // Stellar transaction hashes are 64 characters
-      },
+      // validate: {
+      //   len: [64, 64], // Stellar transaction hashes are 64 characters. Relaxed for holding recovery batched  id
+      // },
     },
     metadata: {
       type: DataTypes.JSONB,

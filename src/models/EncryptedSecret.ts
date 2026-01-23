@@ -4,7 +4,7 @@ import { sequelize } from '../config/database';
 interface EncryptedSecretAttributes {
   id: string;
   walletId: string;
-  secretType: string; // 'master', 'signer', 'recovery', etc.
+  secretType: string; 
   ciphertextBlob: string;
   dataKeyEncrypted: string;
   iv: string;

@@ -59,10 +59,6 @@ MultiSigTransaction.init(
     multiSigWalletId: {
       type: DataTypes.UUID,
       allowNull: false,
-      references: {
-        model: 'multisig_wallets',
-        key: 'id',
-      },
     },
     transactionXDR: {
       type: DataTypes.TEXT,

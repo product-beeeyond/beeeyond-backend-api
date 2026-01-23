@@ -11,6 +11,7 @@ class SecureWalletService {
   /**
    * Securely store a wallet secret with KMS encryption
    */
+  
   async storeWalletSecret(
     walletId: string,
     secretType: string,
@@ -56,10 +57,23 @@ class SecureWalletService {
     secretType: string
   ): Promise<string> {
     try {
-      const secretRecord = await EncryptedSecret.findOne({
-        where: { walletId, secretType },
-        order: [["createdAt", "DESC"]], // Get latest version
-      });
+      let secretRecord;
+      if (walletId === "platform" || walletId === "treasury") {
+        secretRecord = await EncryptedSecret.findOne({
+          where: { secretType },
+          order: [["createdAt", "DESC"]], // Get latest version
+        });
+      } else if (walletId === "recovery") {
+        secretRecord = await EncryptedSecret.findOne({
+          where: { walletId: secretType },
+          order: [["createdAt", "DESC"]], // Get latest version
+        });
+      } else {
+        secretRecord = await EncryptedSecret.findOne({
+          where: { walletId, secretType },
+          order: [["createdAt", "DESC"]], // Get latest version
+        });
+      }
 
       if (!secretRecord) {
         throw new Error(`Secret not found: ${walletId}/${secretType}`);

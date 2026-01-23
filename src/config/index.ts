@@ -1,6 +1,9 @@
 import dotenv from "dotenv";
 dotenv.config();
 
+
+export * from './trovotech';
+
 export const NODE_ENV = process.env.NODE_ENV;
 export const PORT = process.env.PORT;
 export const PING_URL = process.env.PING_URL as string;
@@ -80,7 +83,7 @@ export const STELLAR_RESERVES = {
 };
 
 export const MULTISIG_CONFIG = {
-  // User recovery wallets (1-of-2: User OR Platform)
+  // User wallets (1-of-2: User OR Platform)
   USER_RECOVERY: {
     LOW_THRESHOLD: 1,     // Either user OR platform can sign payments/offers
     MEDIUM_THRESHOLD: 2,  // Both user AND platform required for account management
@@ -123,6 +126,20 @@ export const MULTISIG_CONFIG = {
     EXPECTED_TRUSTLINES: 5, // Multiple assets for operations
     CALCULATED_RESERVE: 0.5 + 2 * 0.5 + 5 * 0.5, // 4 XLM
     FUNDING_AMOUNT: "4.4", // 4 XLM + 10% buffer
+  },
+
+   PLATFORM_PRIMARY: {
+    LOW_THRESHOLD: 1,     // 1-of-2 for routine issuance
+    MEDIUM_THRESHOLD: 2,  // 2-of-2 for issuer account changes
+    HIGH_THRESHOLD: 2,    // 2-of-2 for authorization flags
+    BACKUP1_WEIGHT: 2,    // Main issuer operations
+    BACKUP2_WEIGHT: 1,     // Backup for availability
+    TOTAL_SIGNERS: 2,
+    MASTER_WEIGHT: 0,
+    EXPECTED_SIGNERS: 2,  // backup1 + Backup2
+    EXPECTED_TRUSTLINES: 2, 
+    CALCULATED_RESERVE: 0.5 + 2 * 0.5 + 2 * 0.5, // 2.5 XLM
+    FUNDING_AMOUNT: "2.75", // 2.5 XLM + 10% buffer
   },
 
   // Property distribution (1-of-2: Platform + Optional Property Manager)

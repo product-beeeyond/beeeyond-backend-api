@@ -520,27 +520,18 @@ import {
   // Wallet Management
   createUserMultisigWallet,
   createPlatformWallets,
-  createPropertyWallets,
   // recoverUserWallet,
   getWalletInfo,
   listUserWallets,
   createPlatformTreasury,
   finalizePlatformTreasury,
+  fundBNGN
 } from "../controllers/multisigController";
-
 const router = Router();
 
 // ===========================================
 // VALIDATION MIDDLEWARE
 // ===========================================
-
-const validatePropertyId = (req: any, res: any, next: any) => {
-  const { propertyId } = req.params;
-  if (!propertyId || propertyId.length < 1) {
-    return res.status(400).json({ error: "Valid property ID is required" });
-  }
-  next();
-};
 
 const validatePublicKey = (req: any, res: any, next: any) => {
   const { publicKey } = req.params;
@@ -554,7 +545,7 @@ const validatePublicKey = (req: any, res: any, next: any) => {
 
 const validateCreatePlatformWallet = (req: any, res: any, next: any) => {
   const { walletType, description } = req.body;
-  const validTypes = ["treasury", "issuer", "distribution", "fee_collection"];
+  const validTypes = ["primary", "issuer"];
 
   if (!walletType || !validTypes.includes(walletType)) {
     return res.status(400).json({
@@ -562,9 +553,9 @@ const validateCreatePlatformWallet = (req: any, res: any, next: any) => {
     });
   }
 
-  if (!description || description.trim().length < 10) {
+  if (description && description.trim().length > 200) {
     return res.status(400).json({
-      error: "Description must be at least 10 characters long",
+      error: "Description must be less than 200 characters long",
     });
   }
 
@@ -660,13 +651,18 @@ const validateCreatePlatformWallet = (req: any, res: any, next: any) => {
  * Create recovery wallet for KYC-verified user
  * POST /api/multisig/user/wallet
  */
-router.post("/user/wallet", authenticate, requireKYC, createUserMultisigWallet);
+router.post(
+  "/create-user-wallet",
+  authenticate,
+  requireKYC,
+  createUserMultisigWallet
+);
 
 /**
  * List user's multisig wallets
  * GET /api/multisig/user/wallets
  */
-router.get("/user/wallets", authenticate, listUserWallets);
+router.get("/all-wallets-by-user", authenticate, listUserWallets);
 
 /** ---DEPRECATED----
  * Recover user wallet (Admin only)
@@ -689,7 +685,7 @@ router.get("/user/wallets", authenticate, listUserWallets);
  * POST /api/multisig/platform/wallets
  */
 router.post(
-  "/platform/wallets",
+  "/create-platform-wallet",
   authenticate,
   requireSuperAdmin,
   validateCreatePlatformWallet,
@@ -709,21 +705,6 @@ router.post(
   requireSuperAdmin,
   finalizePlatformTreasury
 );
-// ===========================================
-// PROPERTY WALLET ROUTES
-// ===========================================
-
-/**
- * Create property-specific wallets (Admin only)
- * POST /api/multisig/property/:propertyId/wallets
- */
-router.post(
-  "/property/:propertyId/wallets",
-  authenticate,
-  requireAdmin,
-  validatePropertyId,
-  createPropertyWallets
-);
 
 // ===========================================
 // UTILITY ROUTES
@@ -734,7 +715,7 @@ router.post(
  * GET /api/multisig/wallet/:publicKey
  */
 router.get(
-  "/wallet/:publicKey",
+  "/get-wallet-info/:publicKey",
   authenticate,
   requireAdmin,
   validatePublicKey,
@@ -744,7 +725,16 @@ router.get(
 // ===========================================
 // MULTISIG TRANSACTION ROUTES
 // ===========================================
-
+/**
+ * Fund user wallet with bNGN (Admin only)
+ * POST /multisig/wallet/fund-bngn
+ */
+router.post(
+  "/fund-bngn",
+  authenticate,
+  requireAdmin,
+ fundBNGN
+);
 /**
  * Propose a multisig transaction
  * POST /api/multisig/transactions/propose
