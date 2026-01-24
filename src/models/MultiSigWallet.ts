@@ -5,8 +5,8 @@ import MultiSigTransaction from "./MultiSigTransaction";
 
 interface MultiSigWalletAttributes {
   id: string;
-  userId?: string; // Only for user wallets
-  propertyId?: string; // Only for property wallets
+  userId?: string;
+  propertyId?: string;
   stellarPublicKey: string;
   walletType:
     | "user"
@@ -29,6 +29,14 @@ interface MultiSigWalletAttributes {
     | "awaiting_finalization"
     | "awaiting_funding";
   createdTxHash?: string;
+  
+  // Trovotech-specific fields
+  trovoAlias?: string;
+  trovoWalletTag?: string;
+  registeredOnTrovo: boolean;
+  trovoRegistrationDate?: Date;
+  middlewareWalletPublicKey?: string;
+  
   metadata?: {
     description?: string;
     createdBy?: string;
@@ -43,6 +51,11 @@ interface MultiSigWalletAttributes {
     encryptedMasterKey?: string;
     userEmail?: string;
     userName?: string;
+    // Trovotech metadata (legacy - moved to dedicated fields)
+    // trovoRegistered?: boolean;
+    // trovoTransactionId?: string;
+    // trovoRegisteredAt?: string;
+    // trovoMiddlewareWallet?: string;
   };
   createdAt?: Date;
   updatedAt?: Date;
@@ -50,7 +63,7 @@ interface MultiSigWalletAttributes {
 
 type MultiSigWalletCreationAttributes = Optional<
   MultiSigWalletAttributes,
-  "id" | "createdAt" | "updatedAt"
+  "id" | "createdAt" | "updatedAt" | "registeredOnTrovo"
 >;
 
 class MultiSigWallet
@@ -82,6 +95,14 @@ class MultiSigWallet
     | "awaiting_finalization"
     | "awaiting_funding";
   public createdTxHash?: string;
+  
+  // Trovotech fields
+  public trovoAlias?: string;
+  public trovoWalletTag?: string;
+  public registeredOnTrovo!: boolean;
+  public trovoRegistrationDate?: Date;
+  public middlewareWalletPublicKey?: string;
+  
   public metadata?: {
     description?: string;
     createdBy?: string;
@@ -96,6 +117,10 @@ class MultiSigWallet
     encryptedMasterKey?: string;
     userEmail?: string;
     userName?: string;
+    // trovoRegistered?: boolean;
+    // trovoTransactionId?: string;
+    // trovoRegisteredAt?: string;
+    // trovoMiddlewareWallet?: string;
   };
 
   public readonly createdAt!: Date;
@@ -145,7 +170,7 @@ MultiSigWallet.init(
       allowNull: false,
       unique: true,
       validate: {
-        len: [56, 56], // Stellar public keys are exactly 56 characters
+        len: [56, 56],
       },
     },
     walletType: {
@@ -207,9 +232,41 @@ MultiSigWallet.init(
     createdTxHash: {
       type: DataTypes.STRING,
       allowNull: true,
-      // validate: {
-      //   len: [64, 64], // Stellar transaction hashes are 64 characters. Relaxed for holding recovery batched  id
-      // },
+    },
+    // Trovotech-specific columns
+    trovoAlias: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+      field: 'trovo_alias',
+      comment: 'Trovotech wallet alias/username',
+    },
+    trovoWalletTag: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+      field: 'trovo_wallet_tag',
+      comment: 'Trovotech wallet tag identifier',
+    },
+    registeredOnTrovo: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      allowNull: false,
+      field: 'registered_on_trovo',
+      comment: 'Whether wallet is registered on Trovotech',
+    },
+    trovoRegistrationDate: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      field: 'trovo_registration_date',
+      comment: 'Date when wallet was registered on Trovotech',
+    },
+    middlewareWalletPublicKey: {
+      type: DataTypes.STRING(56),
+      allowNull: true,
+      field: 'middleware_wallet_public_key',
+      comment: 'Trovotech middleware distribution wallet public key (for issuing wallets)',
+      validate: {
+        len: [56, 56],
+      },
     },
     metadata: {
       type: DataTypes.JSONB,
@@ -228,6 +285,10 @@ MultiSigWallet.init(
       { fields: ["stellarPublicKey"], unique: true },
       { fields: ["status"] },
       { fields: ["walletType", "status"] },
+      // Trovotech indexes
+      { fields: ["trovo_alias"] },
+      { fields: ["registered_on_trovo"] },
+      { fields: ["trovo_wallet_tag"] },
     ],
     validate: {
       thresholdConsistency(this: MultiSigWallet) {

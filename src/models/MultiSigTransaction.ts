@@ -1,6 +1,6 @@
-import { DataTypes, Model, Optional } from 'sequelize';
-import { sequelize } from '../config/database';
-import MultiSigWallet from './MultiSigWallet';
+import { DataTypes, Model, Optional } from "sequelize";
+import { sequelize } from "../config/database";
+import MultiSigWallet from "./MultiSigWallet";
 
 interface MultiSigTransactionAttributes {
   id: string;
@@ -8,38 +8,81 @@ interface MultiSigTransactionAttributes {
   transactionXDR: string;
   signedTransactionXDR?: string;
   description: string;
-  category: 'fund_management' | 'governance' | 'revenue_distribution' | 'emergency' | 'recovery';
+  category:
+    | "fund_management"
+    | "governance"
+    | "revenue_distribution"
+    | "emergency"
+    | "recovery";
   requiredSignatures: number;
-  status: 'pending' | 'approved' | 'rejected' | 'executed' | 'failed' | 'expired';
+  status:
+    | "pending"
+    | "approved"
+    | "rejected"
+    | "executed"
+    | "failed"
+    | "expired";
   proposedBy: string;
   executedBy?: string;
   executedAt?: Date;
   executionTxHash?: string;
   failureReason?: string;
   signatures?: object;
+
+  // Trovotech-specific fields
+  trovoTransactionId?: string;
+  trovoStatus?: string;
+  processedViaTrovotech: boolean;
+
   metadata?: object;
   expiresAt: Date;
   createdAt?: Date;
   updatedAt?: Date;
 }
 
-type MultiSigTransactionCreationAttributes = Optional<MultiSigTransactionAttributes, 'id' | 'createdAt' | 'updatedAt'>
+type MultiSigTransactionCreationAttributes = Optional<
+  MultiSigTransactionAttributes,
+  "id" | "createdAt" | "updatedAt" | "processedViaTrovotech"
+>;
 
-class MultiSigTransaction extends Model<MultiSigTransactionAttributes, MultiSigTransactionCreationAttributes> implements MultiSigTransactionAttributes {
+class MultiSigTransaction
+  extends Model<
+    MultiSigTransactionAttributes,
+    MultiSigTransactionCreationAttributes
+  >
+  implements MultiSigTransactionAttributes
+{
   public id!: string;
   public multiSigWalletId!: string;
   public transactionXDR!: string;
   public signedTransactionXDR?: string;
   public description!: string;
-  public category!: 'fund_management' | 'governance' | 'revenue_distribution' | 'emergency' | 'recovery';
+  public category!:
+    | "fund_management"
+    | "governance"
+    | "revenue_distribution"
+    | "emergency"
+    | "recovery";
   public requiredSignatures!: number;
-  public status!: 'pending' | 'approved' | 'rejected' | 'executed' | 'failed' | 'expired';
+  public status!:
+    | "pending"
+    | "approved"
+    | "rejected"
+    | "executed"
+    | "failed"
+    | "expired";
   public proposedBy!: string;
   public executedBy?: string;
   public executedAt?: Date;
   public executionTxHash?: string;
   public failureReason?: string;
   public signatures?: object;
+
+  // Trovotech fields
+  public trovoTransactionId?: string;
+  public trovoStatus?: string;
+  public processedViaTrovotech!: boolean;
+
   public metadata?: object;
   public expiresAt!: Date;
 
@@ -73,7 +116,13 @@ MultiSigTransaction.init(
       allowNull: false,
     },
     category: {
-      type: DataTypes.ENUM('fund_management', 'governance', 'revenue_distribution', 'emergency', 'recovery'),
+      type: DataTypes.ENUM(
+        "fund_management",
+        "governance",
+        "revenue_distribution",
+        "emergency",
+        "recovery",
+      ),
       allowNull: false,
     },
     requiredSignatures: {
@@ -85,8 +134,15 @@ MultiSigTransaction.init(
       },
     },
     status: {
-      type: DataTypes.ENUM('pending', 'approved', 'rejected', 'executed', 'failed', 'expired'),
-      defaultValue: 'pending',
+      type: DataTypes.ENUM(
+        "pending",
+        "approved",
+        "rejected",
+        "executed",
+        "failed",
+        "expired",
+      ),
+      defaultValue: "pending",
     },
     proposedBy: {
       type: DataTypes.STRING,
@@ -104,7 +160,7 @@ MultiSigTransaction.init(
       type: DataTypes.STRING,
       allowNull: true,
       validate: {
-        len: [64, 64], // Stellar transaction hashes are 64 characters
+        len: [64, 64],
       },
     },
     failureReason: {
@@ -115,6 +171,26 @@ MultiSigTransaction.init(
       type: DataTypes.JSONB,
       allowNull: true,
       defaultValue: [],
+    },
+    // Trovotech-specific columns
+    trovoTransactionId: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+      field: "trovo_transaction_id",
+      comment: "Trovotech transaction ID",
+    },
+    trovoStatus: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+      field: "trovo_status",
+      comment: "Trovotech transaction status",
+    },
+    processedViaTrovotech: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      allowNull: false,
+      field: "processed_via_trovotech",
+      comment: "Whether transaction was processed through Trovotech",
     },
     metadata: {
       type: DataTypes.JSONB,
@@ -128,16 +204,21 @@ MultiSigTransaction.init(
   },
   {
     sequelize,
-    modelName: 'MultiSigTransaction',
-    tableName: 'multisig_transactions',
+    modelName: "MultiSigTransaction",
+    tableName: "multisig_transactions",
     indexes: [
-      { fields: ['multiSigWalletId'] },
-      { fields: ['status'] },
-      { fields: ['category'] },
-      { fields: ['proposedBy'] },
-      { fields: ['expiresAt'] },
-      { fields: ['multiSigWalletId', 'status'] },
+      { fields: ["multiSigWalletId"] },
+      { fields: ["status"] },
+      { fields: ["category"] },
+      { fields: ["proposedBy"] },
+      { fields: ["expiresAt"] },
+      { fields: ["multiSigWalletId", "status"] },
+      // Trovotech indexes
+      { fields: ["trovo_transaction_id"] },
+      { fields: ["processed_via_trovotech"] },
+      { fields: ["trovo_status"] },
     ],
-  }
+  },
 );
+
 export default MultiSigTransaction;
