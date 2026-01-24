@@ -1,5 +1,4 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// src/services/trovoTechService.ts
 
 import axios, { AxiosInstance, AxiosError } from "axios";
 import { Keypair } from "@stellar/stellar-sdk";
@@ -14,6 +13,11 @@ import {
   MintTokenResponse,
   PaymentParams,
   PaymentResponse,
+  WalletBalance,
+  PaymentHistoryResponse,
+  PaymentHistoryParams,
+  UpdateKYCParams,
+  UpdateKYCResponse,
   TrovotechError,
   TransactionSignatures,
 } from "../interface/trovotech.dto";
@@ -23,6 +27,7 @@ import {
   sleep,
   calculateBackoffDelay,
   formatTrovotechError,
+  buildPaymentHistoryQuery,
 } from "../utils/trovotechHelpers";
 
 class TrovotechService {
@@ -106,19 +111,16 @@ class TrovotechService {
    */
   private handleAxiosError(error: AxiosError): void {
     if (error.response) {
-      // Server responded with error status
       const trovotechError = error.response.data as TrovotechError;
       logger.error("Trovotech API error:", {
         status: error.response.status,
         error: trovotechError,
       });
     } else if (error.request) {
-      // Request made but no response
       logger.error("Trovotech API no response:", {
         message: error.message,
       });
     } else {
-      // Error in request setup
       logger.error("Trovotech API request setup error:", {
         message: error.message,
       });
@@ -165,7 +167,6 @@ class TrovotechService {
    * Determine if error is retryable
    */
   private isRetryableError(error: any): boolean {
-    // Network errors
     if (
       error.code === "ECONNRESET" ||
       error.code === "ETIMEDOUT" ||
@@ -174,10 +175,8 @@ class TrovotechService {
       return true;
     }
 
-    // HTTP errors that are retryable
     if (error.response) {
       const status = error.response.status;
-      // Retry on 5xx server errors and 429 rate limit
       return status >= 500 || status === 429;
     }
 
@@ -211,7 +210,7 @@ class TrovotechService {
           publicKey: params.publicKey,
           primarySigner: params.primarySigner,
           referrer: params.referrer || "",
-          corporate: 1, // Always 1 for company
+          corporate: 1,
         },
         {
           headers: this.buildHeaders(),
@@ -264,14 +263,11 @@ class TrovotechService {
         },
       );
 
-      logger.info(
-        "Subwallet creation initiated, unsigned transaction received",
-        {
-          walletTag: params.walletTag,
-          signatureRequired: response.data.subWalletMustSign,
-          linkedRequired: response.data.linkedWalletMustSign,
-        },
-      );
+      logger.info("Subwallet creation initiated", {
+        walletTag: params.walletTag,
+        signatureRequired: response.data.subWalletMustSign,
+        linkedRequired: response.data.linkedWalletMustSign,
+      });
 
       return response.data;
     }, "initiateSubwalletCreation");
@@ -323,17 +319,14 @@ class TrovotechService {
       linked?: Keypair;
     },
   ): Promise<SubwalletCreationResponse> {
-    // Phase 1: Get unsigned transaction
     const unsignedResponse = await this.initiateSubwalletCreation(params);
 
-    // Sign the transaction
     const signatures = await signTrovotechTransaction(
       unsignedResponse.transaction,
       unsignedResponse.networkPassPhrase,
       signers,
     );
 
-    // Phase 2: Submit signed transaction
     const finalResponse = await this.submitSubwalletCreation(
       unsignedResponse,
       signatures,
@@ -347,7 +340,7 @@ class TrovotechService {
   // ==========================================
 
   /**
-   * Phase 1: Initiate token minting (gets unsigned transaction)
+   * Phase 1: Initiate token minting
    */
   async initiateMint(
     params: MintTokenParams,
@@ -378,7 +371,7 @@ class TrovotechService {
         },
       );
 
-      logger.info("Mint initiated, unsigned transaction received", {
+      logger.info("Mint initiated", {
         assetCode: params.assetCode,
         signatureRequired: response.data.signatureRequired,
       });
@@ -433,10 +426,8 @@ class TrovotechService {
   ): Promise<MintTokenResponse> {
     const issuerPublicKey = issuerKeypair.publicKey();
 
-    // Phase 1: Get unsigned transaction
     const unsignedResponse = await this.initiateMint(params, issuerPublicKey);
 
-    // Sign the transaction
     const signatures = await signTrovotechTransaction(
       unsignedResponse.transaction,
       unsignedResponse.networkPassPhrase,
@@ -444,10 +435,9 @@ class TrovotechService {
     );
 
     if (!signatures.primarySignature) {
-      throw new Error("Failed to generate primary signature for mint");
+      throw new Error("Failed to generate signature for mint");
     }
 
-    // Phase 2: Submit signed transaction
     const finalResponse = await this.submitMint(
       unsignedResponse,
       signatures.primarySignature,
@@ -463,7 +453,7 @@ class TrovotechService {
   // ==========================================
 
   /**
-   * Phase 1: Initiate payment (gets unsigned transaction)
+   * Phase 1: Initiate payment
    */
   async initiatePayment(
     params: PaymentParams,
@@ -495,7 +485,7 @@ class TrovotechService {
         },
       );
 
-      logger.info("Payment initiated, unsigned transaction received", {
+      logger.info("Payment initiated", {
         assetCode: params.assetCode,
         signatureRequired: response.data.signatureRequired,
         fee: response.data.feeAmount,
@@ -506,7 +496,7 @@ class TrovotechService {
   }
 
   /**
-   * Phase 2: Submit signed payment transaction
+   * Phase 2: Submit signed payment
    */
   async submitPayment(
     unsignedResponse: PaymentResponse,
@@ -553,14 +543,12 @@ class TrovotechService {
   ): Promise<PaymentResponse> {
     const signerPublicKey = signerKeypair.publicKey();
 
-    // Phase 1: Get unsigned transaction
     const unsignedResponse = await this.initiatePayment(
       params,
       senderPublicKey,
       signerPublicKey,
     );
 
-    // Sign the transaction
     const signatures = await signTrovotechTransaction(
       unsignedResponse.transaction,
       unsignedResponse.networkPassPhrase,
@@ -571,7 +559,6 @@ class TrovotechService {
       throw new Error("Failed to generate signature for payment");
     }
 
-    // Phase 2: Submit signed transaction
     const finalResponse = await this.submitPayment(
       unsignedResponse,
       signatures.primarySignature,
@@ -581,6 +568,102 @@ class TrovotechService {
     );
 
     return finalResponse;
+  }
+
+  // ==========================================
+  // BALANCE & QUERY OPERATIONS
+  // ==========================================
+
+  /**
+   * Get wallet balance
+   */
+  async getBalance(walletPublicKey: string): Promise<WalletBalance> {
+    return this.executeWithRetry(async () => {
+      if (!isValidStellarPublicKey(walletPublicKey)) {
+        throw new Error("Invalid wallet public key");
+      }
+
+      logger.info("Fetching wallet balance", { walletPublicKey });
+
+      const response = await this.client.get<WalletBalance>(
+        `/v1/trovoapi/users/balance/${walletPublicKey}`,
+        {
+          headers: this.buildHeaders(),
+        },
+      );
+
+      logger.info("Balance fetched successfully", {
+        walletPublicKey,
+        assetCount: response.data.claimed.length,
+      });
+
+      return response.data;
+    }, "getBalance");
+  }
+
+  /**
+   * Get payment history
+   */
+  async getPaymentHistory(
+    walletPublicKey: string,
+    params?: PaymentHistoryParams,
+  ): Promise<PaymentHistoryResponse> {
+    return this.executeWithRetry(async () => {
+      if (!isValidStellarPublicKey(walletPublicKey)) {
+        throw new Error("Invalid wallet public key");
+      }
+
+      const queryString = buildPaymentHistoryQuery(params || {});
+      logger.info("Fetching payment history", { walletPublicKey, params });
+
+      const response = await this.client.get<PaymentHistoryResponse>(
+        `/v1/trovo-api/users/payment-history/${walletPublicKey}${queryString}`,
+        {
+          headers: this.buildHeaders(),
+        },
+      );
+
+      logger.info("Payment history fetched successfully", {
+        walletPublicKey,
+        recordCount: response.data.records.length,
+      });
+
+      return response.data;
+    }, "getPaymentHistory");
+  }
+
+  // ==========================================
+  // KYC OPERATIONS
+  // ==========================================
+
+  /**
+   * Update user KYC status
+   */
+  async updateUserKYC(params: UpdateKYCParams): Promise<UpdateKYCResponse> {
+    return this.executeWithRetry(async () => {
+      logger.info("Updating user KYC", {
+        targetUsername: params.targetTrovoUsername,
+        kycStatus: params.kycStatus,
+      });
+
+      const response = await this.client.post<UpdateKYCResponse>(
+        "/v1/trovo-api/users/update-kyc",
+        {
+          targetTrovoUsername: params.targetTrovoUsername,
+          kycStatus: params.kycStatus,
+          kycJsonData: params.kycJsonData,
+        },
+        {
+          headers: this.buildHeaders(),
+        },
+      );
+
+      logger.info("KYC updated successfully", {
+        targetUsername: params.targetTrovoUsername,
+      });
+
+      return response.data;
+    }, "updateUserKYC");
   }
 }
 
